@@ -1,0 +1,39 @@
+#PBS -r n
+#PBS -l mem=1GB,walltime=1:00:00,ncpus=1
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+# basecalling
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N basecalling_${SampleID} 1_basecalling_dorado.pbs
+
+# trim fix
+basecalling_jobid=$(qstat -f | grep -w "basecalling_${SampleID}" | grep -oP '(\d{8})$' | uniq)
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N fix_trim_${SampleID} -W depend=afterok:${basecalling_jobid} 2_trim_fix_mod.pbs
+
+# alignment
+trimfix_jobid=$(qstat -f | grep -w "fix_trim_${SampleID}" | grep -oP '(\d{8})$' | uniq)
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N alignment_${SampleID} -W depend=afterok:${trimfix_jobid} 3_alignment.pbs
+
+# QC
+alignment_jobid=$(qstat -f | grep -w "alignment_${SampleID}" | grep -oP '(\d{8})$' | uniq)
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N QC_${SampleID} -W depend=afterok:${alignment_jobid} 4_QC.pbs
+
+# extract_mods
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N extract_mod_${SampleID} -W depend=afterok:${alignment_jobid} 5_extract_mod.pbs
+
+# clair3
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N clair3_${SampleID} -W depend=afterok:${alignment_jobid} 6_clair3.pbs
+
+# whatshap
+clair3_jobid=$(qstat -f | grep -w "clair3_${SampleID}" | grep -oP '(\d{8})$' | uniq)
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N whatshap_${SampleID} -W depend=afterok:${clair3_jobid} 7_whatshap.pbs
+
+# extract_mod_haplo
+whatshap_jobid=$(qstat -f | grep -w "whatshap_${SampleID}" | grep -oP '(\d{8})$' | uniq)
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N haplo_mod_${SampleID} -W depend=afterok:${whatshap_jobid} 8_extract_mod_haplo.pbs
+
+# SV
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N delly_${SampleID} -W depend=afterok:${alignment_jobid} 9a_SV_delly.pbs
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N nanomonsv_${SampleID} -W depend=afterok:${alignment_jobid} 9b_SV_nanomonsv.pbs

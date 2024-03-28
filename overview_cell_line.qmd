@@ -1,0 +1,963 @@
+---
+title: "cell_line_overview"
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+#| include: false
+library("data.table")
+library("ComplexHeatmap")
+library("ggplot2")
+library("tidyverse")
+library("purrr")
+library("future")
+library("scales")
+library("ggfortify")
+library("ggrepel")
+library(vroom)
+library(matrixStats)
+library(factoextra)
+library(corrplot)
+library(ggpubr)
+library("furrr")
+library(scattermore)
+library(circlize)
+```
+
+```{r}
+cell_line_palette <- c("OVCAR8"= "#fe7f2d", "OVCAR8_LP_A6_30" = "#fcca46", "UWB1" = "#619b8a", "UWB1_BRCA1" = "#a1c181", "WEHI_CS62" = "#7461B1")
+
+setDTthreads(threads = 2)
+plan(multisession, workers = 2)
+```
+
+# general QC
+
+## QC plots
+
+```{r}
+QC_summary <- Sys.glob("output/*/QC/*_summary.tsv") %>%
+  map_dfr(~ fread(., select = c("sequence_length_template", "mean_qscore_template")) %>%
+            mutate(Sample = gsub("_summary.tsv", "", basename(.x)))) %>%
+  group_by(Sample)
+
+
+# read length            
+QC_summary %>%
+ggplot(aes(x = Sample, y = sequence_length_template, fill = Sample))+
+  geom_violin()+
+  geom_boxplot(width = 0.1, alpha = 0.2, outlier.shape = NA)+
+  scale_y_continuous(trans = log10_trans(),labels = label_comma(), name = "Read Length")+
+  xlab("Cell Line")+
+  theme_bw()+
+  scale_fill_manual(values = cell_line_palette )+
+  theme(legend.position= "none", 
+        axis.text.x = element_text(angle = 60, hjust = 1))
+
+ggsave("plots/QC/read_length.pdf",width = 8, height =7 )
+
+# mean qscore
+QC_summary %>%
+ggplot(aes(x = Sample, y = mean_qscore_template, fill = Sample))+
+  geom_violin(adjust = 4)+
+  geom_boxplot(width = 0.1, alpha = 0.2, outlier.shape = NA)+
+  scale_y_continuous( name = "Mean Quality Score per Read")+
+  xlab("Cell Line")+
+  theme_bw()+
+  scale_fill_manual(values = cell_line_palette )+
+  theme(legend.position= "none", 
+        axis.text.x = element_text(angle = 60, hjust = 1))
+
+ggsave("plots/QC/mean_base_quality.pdf",width = 8, height =7 )
+  
+
+#coverage
+Coverage <- Sys.glob("output/*/coverage/*.summary.txt")%>%
+  map_dfr(~ fread(., select = c("chrom", "mean")) %>%
+            mutate(Sample = gsub("_unphased.mosdepth.summary.txt", "", basename(.x)))) %>%
+  mutate(chrom = factor(chrom, levels = c(paste0("chr", seq(0, 22))))) %>%
+  filter(! is.na(chrom))
+
+Coverage %>%
+  ggplot(aes(x = chrom, y = mean, group = Sample, color = Sample))+
+  geom_point()
+
+
+#N50 & read depth
+pycoQC<- Sys.glob("output/*/QC/*pycoQC_output.html") %>%
+  map_dfr(~ as.data.frame(fread(cmd = paste0("grep 'N50' ", .x), sep = "?", header=F)[[1L]][[2]]) %>%
+            mutate(Sample = gsub("_pycoQC_output.html", "", basename(.x)))) %>%
+  dplyr::rename(lines = 1) 
+
+lines = lapply(pycoQC$lines, function(x) unlist(strsplit(unlist(strsplit(x, ":"))[[10]], ", ")))
+pycoQC$N50_upper <- unlist(lapply(lines, function(x) as.numeric(gsub("\\[","",x[9]))))
+pycoQC$N50_lower <- unlist(lapply(lines, function(x) as.numeric(gsub("\\]","",x[10]))))
+pycoQC$read_depth_upper <- unlist(lapply(lines, function(x) as.numeric(gsub("\\[","",x[7]))))
+pycoQC$read_depth_lower <- unlist(lapply(lines, function(x) as.numeric(gsub("\\]","",x[8]))))
+
+pycoQC <-pycoQC %>%
+  dplyr::select(-lines) %>%
+  mutate(N50 = (N50_upper+N50_lower)/2,
+         read_depth = (read_depth_lower + read_depth_upper)/2) %>%
+  dplyr::select(Sample, N50, read_depth)
+
+write.table(pycoQC, "plots/N50_RD.tsv", quote = F, row.names = F, sep = "\t")
+```
+
+# load methylation
+
+```{r}
+lr_all_sample <- Sys.glob("output/*/Me/*_pileup_tab.bed") %>%
+  map_dfr( ~ fread(.) %>%
+             `colnames<-`(c("chrom", "start", "end", "mod_type", "Nvalid_cov_2", "strand", "start_2", "end_2", "color_2", "Nvalid_cov", "fraction_mod", "Nmod", "Ncanonical", "Nother_mod", "Ndelete", "Nfail", "Ndiff", "Nnocall")) %>%
+             dplyr::select(-contains("_2")) %>%
+             mutate(Sample = gsub("_pileup_tab.bed", "", basename(.x))))  %>%
+  mutate(chrom = factor(chrom, level = paste0("chr", seq(1,22)))) %>%
+  filter(!is.na(chrom))
+
+
+lr_5mc <- lr_all_sample %>%
+  filter(mod_type == "m")
+
+
+lr_5hmc <- lr_all_sample %>%
+  filter(mod_type == "h")
+
+rm(lr_all_sample)
+sample_list <- unique(lr_5mc$Sample)
+```
+
+```{r}
+#5mc
+lr_5mc_wide <- lr_5mc %>%
+  dplyr::select(Sample, chrom, start, fraction_mod) %>%
+  pivot_wider(names_from = "Sample", values_from = "fraction_mod")
+
+#5hmc
+lr_5hmc_wide <- lr_5hmc %>%
+   mutate(chrom = factor(chrom, level = paste0("chr", seq(1,22)))) %>%
+  filter(!is.na(chrom)) %>%
+  dplyr::select(Sample, chrom, start, fraction_mod) %>%
+  pivot_wider(names_from = "Sample", values_from = "fraction_mod")
+
+```
+
+## filtration
+
+if the absence sites are SNP
+
+```{r}
+lr_5mc_missing <- lr_5mc_wide[!complete.cases(lr_5mc_wide),]
+
+#consider all the possibility of altered CpG then construct a bed file 
+lr_5mc_missing %>%
+  mutate(pos_1 = start -1, pos_2 = start +1) %>%
+  dplyr::select(chrom, pos_1, pos_2) %>%
+  write.table(., "output/mod_missing.bed", quote = F, row.names = F, col.names = F, sep = "\t")
+```
+
+```{bash}
+module load bedtools/2.29.0
+intersectBed -a /reference/dbsnp/150_hg38/All_20170710.vcf -b mod_missing.bed -header > mod_snp.vcf
+```
+
+```{r}
+snp_150_overlap <- fread("output/mod_snp.vcf", skip = "#CHROM") 
+snp_150_overlap %>% filter(startsWith(REF, "G")|startsWith(REF, "C"))
+```
+
+coverage testing
+
+```{r}
+# for (min_cov in c(10,5)){
+# min_cov <- lr_5mc%>%
+#   filter(Nvalid_cov >=min_cov) %>%
+#   dplyr::select(Sample, chrom, start, fraction_mod) %>%
+#   pivot_wider(names_from = "Sample", values_from = "fraction_mod")
+# min_cov_missing <- min_cov[!complete.cases(min_cov),]
+# 
+# print(dim(min_cov)[1]-dim(min_cov_missing)[1])}
+
+min_cov <- lr_5mc%>%
+  filter(Nvalid_cov >=5) %>%
+  dplyr::select(Sample, chrom, start, fraction_mod) %>%
+  pivot_wider(names_from = "Sample", values_from = "fraction_mod")
+
+```
+
+# overview of methylation landscape 5mC
+
+```{r}
+lr_5mc_filt <- na.omit(min_cov)
+lr_5hmc_filt <- na.omit(min_cov) %>%
+  dplyr::select(chrom, start) %>%
+  left_join(lr_5hmc_wide)
+```
+
+## position specific
+
+### TSS
+
+```{r}
+TSS <- fread("ref/biomaRT_TSS_hg38_20MAR2024.txt") %>%
+  filter(`Chromosome/scaffold name` %in% as.character(seq(0,22)),
+         `RefSeq match transcript (MANE Select)` !="")%>%
+  dplyr::select(chrom =`Chromosome/scaffold name`, TSS = `Transcription start site (TSS)`, Gene_name = `Gene name` ) %>%
+  mutate(chrom = paste0("chr", chrom),
+         TSS_start = TSS- 10000, TSS_end = TSS+ 10000)
+
+
+TSS_annotation <- na.omit(TSS %>%
+  left_join(lr_5mc_filt, by = join_by(chrom==chrom, TSS_start <= start, TSS_end >= start)))
+
+TSS_annotation %>%
+  mutate(distance = start - TSS,
+         bin = round(distance/100)) %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "methylation") %>%
+  group_by(Sample, bin) %>%
+  summarise(mean = mean(methylation)) %>%
+  ggplot(aes(x = bin /10, y = mean, color = Sample))+
+  geom_line()+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  xlab("Relative to TSS (kb)")+
+  ylab("Average Methylation %")+
+  theme(legend.position = "bottom")
+         
+ggsave("plots/Me/TSS_line.pdf", width = 10, height = 7)
+
+# 
+# library(scattermore)
+# TSS_annotation %>%
+#   pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "methylation") %>%
+#   mutate(pos = start -TSS) %>%
+#   group_by(Sample) %>%
+#   group_map( ~ ggplot(.x, aes(x = pos, y = methylation))+
+#   geom_scattermore(alpha = 0.1))
+  
+
+
+TSS_plots <- TSS_annotation %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "methylation") %>%
+  mutate(pos = (start -TSS)/1000) %>%
+  group_by(Sample) %>%
+  group_map( ~ ggplot(.x, aes(x = pos, y = methylation))+
+               geom_bin2d(bins = 70) +
+  scale_fill_continuous(type = "viridis",
+                        trans = scales::log10_trans(), breaks = 10^seq(0,6), labels = 10^seq(0,6)) +
+  xlab("Relative to TSS (kb)")+
+  theme_bw()+
+    theme(legend.position = "bottom")+
+    ggtitle(unique(.y)))
+
+ggarrange(plotlist = TSS_plots, nrow = 3, ncol = 2)
+
+ggsave("plots/Me/TSS_individual_profile.pdf", height = 16, width = 10)
+```
+
+### island shore shelf
+
+```{r}
+ucsc_island_annot <- fread("ref/cpg_islands_ucsc.bed") 
+
+CpG_annot <- ucsc_island_annot %>%
+  dplyr::select(chrom, chromStart,chromEnd, name) %>%
+  mutate(chrom = factor(chrom, levels = paste0("chr", seq(0, 22)))) %>%
+  filter(!is.na(chrom))
+
+
+lr_5mc_island <- lr_5mc_filt %>%
+  left_join(CpG_annot %>%
+              mutate(chromStart_ext = chromStart-4000,
+                     chromEnd_ext = chromEnd+4000,), by = join_by(chrom == chrom, start >= chromStart_ext, start <= chromEnd_ext))
+
+
+island_coverage <- lr_5mc_island %>%
+  filter(!is.na(name)) %>%
+  filter(start >= chromStart, start <= chromEnd) %>%
+  group_by(chrom, chromStart, chromEnd, name) %>%
+  summarise(n= n()) %>%
+  left_join(ucsc_island_annot %>%
+              dplyr::select(chrom, chromStart, chromEnd, name, cpgNum))
+
+# cross check the number I have and the number has been annotated by the ucsc track
+island_coverage %>%
+  mutate(proportion = n/cpgNum) %>%
+  ggplot(aes(x = chrom, y = proportion))+
+  geom_boxplot()
+
+
+lr_5mc_island %>%
+  filter(!is.na(name)) %>%
+  mutate(island_bin_size = (chromEnd-chromStart)/10,
+         bin = case_when(start < chromStart ~ floor((start- chromStart+4000)/200),
+                         start >=chromStart & start <chromEnd ~ floor((start-chromStart)/island_bin_size)+20,
+                         start >= chromEnd ~ floor((start -chromEnd)/200) + 30)) %>%
+  group_by(bin) %>%
+  summarise(OVCAR8_LP_A6_30 = mean(OVCAR8_LP_A6_30),
+            OVCAR8 = mean(OVCAR8),
+            UWB1_BRCA1 = mean(UWB1_BRCA1),
+            UWB1 = mean(UWB1),
+            WEHI_CS62 = mean(WEHI_CS62)) %>%
+  ungroup() %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "Methylation") %>%
+  ggplot(aes(x = bin, y = Methylation, color = Sample, group = Sample)) +
+  geom_line()+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  ggtitle("all CpG island")
+  
+ggsave("plots/Me/CpG_island_all_binned.pdf")
+
+
+mat <- lr_5mc_island %>%
+  filter(!is.na(name)) %>%
+  mutate(island_bin_size = (chromEnd-chromStart),
+         bin = case_when(start < chromStart ~ (start- chromStart),
+                         start >=chromStart & start <chromEnd ~ (start-chromStart)/island_bin_size*2000,
+                         start >= chromEnd ~ (start -chromEnd) + 2000),
+         name = paste(chrom, chromStart, sep = "_")) %>%
+  pivot_longer(cols = all_of(sample_list),values_to = "Methylation", names_to = "Sample") %>%
+  group_by(Sample) %>%
+  group_map(~ ggplot(., aes(x = bin, y = name, color = Methylation)) +
+                       geom_scattermore(pointsize = 0)+
+              theme_bw()+
+              theme(axis.ticks.y = element_blank(), axis.text.y = element_blank())+
+              scale_color_distiller(palette= "YlOrBr", direction = 1)+
+              ylab("CpG Island")+
+              scale_x_continuous(breaks = c(-4000, -2000, 0, 2000, 4000, 6000), 
+                                 labels = c("-4000", "-2000", "left", "right", "2000", "4000"))+
+              ggtitle(unique(.y)))
+
+pdf("plots/Me/CpG_island_binned_all_sites.pdf", height = 15, width = 17)
+ggarrange(plotlist = mat, nrow = 1, common.legend = T ,legend = "bottom")
+dev.off()
+```
+
+### island shore shelf boxplot
+
+```{r}
+lr_5mc_island_boxplot <- lr_5mc_island %>%
+  mutate(location = case_when(
+    is.na(name) ~ "Open_Sea",
+    start < chromStart & (chromStart - start) < 2000 ~ "N_Shore",
+        start < chromStart & (chromStart - start) <=4000 ~ "N_Shelf",
+        start > chromEnd & (start - chromEnd) < 2000 ~ "S_Shore",
+         start > chromEnd & (start - chromEnd) <= 4000 ~ "S_Shelf",
+        TRUE ~ "Island"),
+        location = factor(location ,levels = c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "Open_Sea"))) %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "Methylation") 
+
+island.stat <- lr_5mc_island_boxplot %>%
+  group_by(location, .keep =T) %>%
+  group_map(~ kruskal.test(Methylation ~ Sample, data =.))
+
+island.stat.paired <- lr_5mc_island_boxplot %>%
+  group_by(location, .keep = T) %>%
+  group_map(~ pairwise.wilcox.test(.x$Methylation, .x$Sample, p.adjust.method = "BH"))
+
+island.stat.paired.df <- bind_rows(lapply(island.stat.paired, function(x) as.data.frame((x$p.value)) %>%
+         rownames_to_column("group1"))) %>%
+  mutate(location = unlist(lapply(c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "Open_Sea"), function(x) rep(x, 4)))) %>%
+  pivot_longer(cols = c("OVCAR8", "OVCAR8_LP_A6_30", "UWB1", "UWB1_BRCA1"), names_to = "group2", values_to = "p.adj")%>%
+  filter(!is.na(p.adj)) %>%
+  mutate(`.y.` = "Methylation",
+         y.position = rep(seq(105, 150, 5), 6),
+         p.sig = case_when(p.adj > 0.05 ~ "ns",
+            p.adj > 0.01 ~ "*",
+            p.adj > 0.001 ~ "**",
+            !is.na(p.adj) ~ "***"),
+         location = factor(location ,levels = c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "Open_Sea")))
+
+plots <- lr_5mc_island_boxplot %>%
+  ggplot(aes(x = Sample, y = Methylation, color = Sample))+
+  geom_boxplot()+
+  facet_grid(cols = vars(location))+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom",axis.text.x = element_text(angle = 60, hjust = 1))
+ggsave("plots/Me/CpG_island_location_boxplot.pdf", width =12, height = 7)
+
+violin <- lr_5mc_island_boxplot %>%
+  ggplot(aes(x = Sample, y = Methylation))+
+  geom_violin(aes(color = Sample))+
+  facet_grid(cols = vars(location))+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom",axis.text.x = element_text(angle = 60, hjust = 1))+
+  stat_pvalue_manual(island.stat.paired.df, label = "p.sig", tip.length = 0,size = 2)
+ggsave(plot = violin, "plots/Me/CpG_island_location_violinplot.pdf", width =15, height = 7)
+
+```
+
+### promoter overlapped island
+
+```{r}
+#TSS intersected
+promoter <- fread("ref/human_epdnew_eu9NP.bed") %>%
+  `colnames<-`(c("chrom", "promoterStart", "promoterEnd", "promoterName", "score", "strand"))
+
+promoter_annotation <-CpG_annot %>%
+  left_join(promoter, by =join_by(chrom == chrom, chromStart <=promoterStart, chromEnd >= promoterEnd) )%>%
+  group_by(chrom, chromStart, chromEnd, name) %>%
+  summarise(promoter_overlap = sum(!is.na(promoterName))>0)
+
+lr_island %>%
+  filter(!is.na(name)) %>%
+  left_join(promoter_annotation) %>%
+  mutate(promoter_overlap = paste0("Promoter Overlapped:", promoter_overlap)) %>%
+  mutate(island_bin_size = (chromEnd-chromStart)/10,
+         bin = case_when(start < chromStart ~ floor((start- chromStart+4000)/200),
+                         start >=chromStart & start <chromEnd ~ floor((start-chromStart)/island_bin_size)+20,
+                         start >= chromEnd ~ floor((start -chromEnd)/200) + 30)) %>%
+  group_by(bin, promoter_overlap) %>%
+  summarise(OVCAR8_LP_A6_30 = mean(OVCAR8_LP_A6_30),
+            OVCAR8 = mean(OVCAR8),
+            UWB1_BRCA1 = mean(UWB1_BRCA1),
+            UWB1 = mean(UWB1),
+            WEHI_CS62 = mean(WEHI_CS62)) %>%
+  ungroup() %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "Methylation") %>%
+  ggplot(aes(x = bin, y = Methylation, color = Sample, group = Sample)) +
+  geom_line()+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  facet_wrap(~promoter_overlap, nrow =2)
+ggsave("plots/Me/CpG_island_promoter.pdf", height =6, width =4)
+
+
+
+# raster plot
+lr_island_plots <- lr_island %>%
+  filter(!is.na(name)) %>%
+  left_join(promoter_annotation) %>%
+  mutate(promoter_overlap = paste0("Promoter Overlapped:", promoter_overlap)) %>%
+  mutate(island_bin_size = (chromEnd-chromStart),
+         bin = case_when(start < chromStart ~ start- chromStart+4000,
+                         start >=chromStart & start <chromEnd ~ (start-chromStart)/island_bin_size*2000+4000,
+                         start >= chromEnd ~ (start -chromEnd)+ 6000)) %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "methylation")  %>%
+  group_by(Sample, promoter_overlap) %>%
+  group_map( ~ ggplot(.x, aes(x = bin, y = methylation))+
+               geom_bin2d(bins = 70) +
+  scale_fill_continuous(type = "viridis",
+                        trans = scales::log10_trans(), breaks = 10^seq(0,5), labels = 10^seq(0,5)) +
+  xlab("bin")+
+  theme_bw()+
+    theme(legend.position = "none")+
+    ggtitle(unique(paste0(.y$Sample, "_", .y$promoter_overlap))))
+
+ggarrange(plotlist = lr_island_plots, nrow =5, ncol = 2)
+ggsave("plots/Me/CpG_island_promoter_breakdown_raster.pdf", height = 24, width = 10)
+```
+
+### Island promoter overlap boxplot
+
+```{r}
+
+lr_5mc_island_prom_boxplot <- lr_5mc_island_boxplot %>%
+  filter(!is.na(name)) %>%
+  left_join(promoter_annotation) %>%
+  mutate(promoter_overlap = paste0("Promoter Overlapped:", promoter_overlap))
+
+island.stat <- lr_5mc_island_prom_boxplot %>%
+  group_by(location, promoter_overlap, .keep = T) %>%
+  group_map(~ kruskal.test(Methylation ~ Sample, data =.))
+
+island.stat.paired <- lr_5mc_island_prom_boxplot %>%
+  group_by(location,promoter_overlap, .keep = T) %>%
+  group_map(~ pairwise.wilcox.test(.$Methylation, .$Sample, p.adjust.method = "BH"))
+
+
+violin <- lr_5mc_island_prom_boxplot %>%
+  ggplot(aes(y = Methylation, x = Sample, color = Sample))+
+  geom_violin()+
+  facet_grid(promoter_overlap~location)+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom",axis.text.x = element_text(angle = 60, hjust = 1))
+
+pdf("plots/Me/CpG_island_location_promoter_violinplot.pdf", width =15, height = 14)
+violin
+dev.off()
+```
+
+# whole genome methylation association across sample
+
+```{r}
+meth_mat <- na.omit(lr_5mc_filt %>%
+                      mutate(sitename=paste(chrom,start, sep = "_")) %>%
+                      column_to_rownames("sitename") %>%
+                      dplyr::select(-chrom, -start))
+sds=rowSds(as.matrix(meth_mat)/100)
+sds_col = colSds(as.matrix(meth_mat)/100)
+meth_mat = meth_mat[sds>0.25,sds_col>0]
+pcr <- prcomp(t(meth_mat), scale.= F, center =T)
+
+
+library(factoextra)
+fviz_eig(pcr)
+
+fviz_pca_ind(pcr, repel =T, habillage = colnames(meth_mat), palette = unlist(cell_line_palette), axes.linetype=NA)+
+  theme(legend.position = "none") 
+ggsave("plots/QC/pca.pdf", height = 6, width = 6)
+
+corr_matrix <-cor(na.omit(lr_5mc_filt  %>%
+  dplyr::select(-chrom, -start)))
+pdf("plots/QC/corr_all_cpg_post_filt.pdf")
+corrplot(corr_matrix,method = "color", order = "alphabet", addCoef.col = "black")
+dev.off()
+
+corr_matrix <-cor(meth_mat)
+pdf("plots/QC/corr_all_cpg_sd_0.25.pdf")
+corrplot(corr_matrix,method = "color", order = "alphabet", addCoef.col = "black")
+dev.off()
+```
+
+```{r}
+single_base_matched_dmr <- fread("output/dmr_pb/single_base_matched_dmr.bed") %>%
+  filter(V1 %in% paste0("chr", seq(1,22))) %>%
+  `colnames<-`(c("chrom", "start_position", "end_position", "name", "score", "sample_a_counts", "sample_a_total", 
+                 "sample_b_counts", "sample_b_total", "sample_a_fraction", "sample_b_fraction", "sample_a_percent_modified",
+                 "sample_b_percent_modified", "MAP_based_p_value", "effect_size", "balanced_MAP_based_p_value","balanced_effect_size",
+                 "per_replicate_p_value", "per_replicate_effect_sizes"))
+
+single_base_matched_dmr %>%
+  mutate(chrom = factor(chrom, levels = paste0("chr", seq(1,22)))) %>%
+  ggplot(aes(x= chrom, y = balanced_MAP_based_p_value))+
+  geom_violin()+
+  geom_hline(aes(yintercept = 0.05))+
+  scale_y_continuous(trans = log2_trans()) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+HRD_dmr <- single_base_matched_dmr %>%
+  filter(balanced_MAP_based_p_value<= 0.05)
+
+HRD_dmr %>%
+  mutate(sitename = paste(chrom, start_position, sep = "_")) %>%
+  pull(sitename) ->HRD_dmr_list
+
+meth_mat_sub <- meth_mat%>%
+  filter(rownames(.) %in% HRD_dmr_list)
+
+pcr_sub <- prcomp(t(meth_mat_sub), scale.= F, center =T)
+
+fviz_eig(pcr_sub)
+
+fviz_pca_ind(pcr_sub, repel =T, habillage = colnames(meth_mat), palette = unlist(cell_line_palette), axes.linetype=NA)+
+  theme(legend.position = "none") 
+ggsave("plots/QC/pca_hrd_dmr.pdf", height = 6, width = 6)
+
+
+corr_matrix <-cor(meth_mat_sub)
+pdf("plots/QC/corr_cpg_sd_0.25_modkit.pdf")
+corrplot(corr_matrix,method = "color", order = "alphabet",addCoef.col = "black")
+dev.off()
+
+meth_mat_sub <-na.omit(lr_5mc_filt %>%
+                      mutate(sitename=paste(chrom,start, sep = "_")) %>%
+                      column_to_rownames("sitename") %>%
+                      dplyr::select(-chrom, -start))%>%
+  filter(rownames(.) %in% HRD_dmr_list)
+
+corr_matrix <-cor(meth_mat_sub)
+pdf("plots/QC/corr_cpg_modkit.pdf")
+corrplot(corr_matrix,method = "color", order = "alphabet",addCoef.col = "black")
+dev.off()
+
+pcr_sub <- prcomp(t(meth_mat_sub), scale.= F, center =T)
+
+fviz_pca_ind(pcr_sub, repel =T, habillage = colnames(meth_mat), palette = unlist(cell_line_palette), axes.linetype=NA)+
+  theme(legend.position = "none") 
+
+
+Heatmap(meth_mat_sub, show_row_names = F, clustering_distance_columns = "kendall")
+
+```
+
+```{r}
+dmr <- fread("output/dmr/OVCAR8_LP_A6_30_UWB1_BRCA1.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, OVCAR8LPA630_UWB1BRCA1= V5) %>%
+  left_join(., fread("output/dmr/OVCAR8_LP_A6_30_UWB1.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, OVCAR8LPA630_UWB1= V5)) %>%
+  left_join(., fread("output/dmr/OVCAR8_LP_A6_30_WEHI_CS62.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, OVCAR8LPA630_WEHICS62= V5)) %>%
+  left_join(., fread("output/dmr/OVCAR8_OVCAR8_LP_A6_30.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, OVCAR8_OVCAR8LPA630= V5)) %>%
+  left_join(., fread("output/dmr/OVCAR8_UWB1_BRCA1.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, OVCAR8_UWB1BRCA1= V5)) %>%
+    left_join(., fread("output/dmr/OVCAR8_UWB1.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, OVCAR8_UWB1= V5)) %>%
+  left_join(., fread("output/dmr/OVCAR8_WEHI_CS62.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, OVCAR8_WEHICS62= V5)) %>%
+  left_join(., fread("output/dmr/UWB1_BRCA1_WEHI_CS62.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, UWB1BRCA1_WEHICS62= V5)) %>%
+  left_join(., fread("output/dmr/UWB1_WEHI_CS62.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, UWB1_WEHICS62= V5)) %>%
+  left_join(., fread("output/dmr/UWB1_UWB1_BRCA1.bed") %>%
+  dplyr::select(chr = V1, start= V2, end =V3, name = V4, UWB1_UWB1BRCA1= V5))
+
+
+dmr_paired <- fread("output/dmr_pb/single_base_paired_dmr.bed") %>%
+    filter(V1 %in% paste0("chr", seq(1,22)))
+
+dmr_paired_diff <-dmr_paired %>%
+  filter(V14< 0.05)
+
+Heatmap(dmr %>%dplyr::select(OVCAR8_OVCAR8LPA630, UWB1_UWB1BRCA1, UWB1BRCA1_WEHICS62, OVCAR8_WEHICS62,
+                             OVCAR8_UWB1, OVCAR8LPA630_UWB1BRCA1) %>%
+          arrange(-UWB1_UWB1BRCA1, OVCAR8_OVCAR8LPA630) %>%
+          filter(UWB1_UWB1BRCA1 > 40, OVCAR8_OVCAR8LPA630 > 40), col = col_fun)
+
+library(circlize)
+col_fun = colorRamp2(breaks = c(0, 40, 3000), c("blue", "white", "red"))
+
+```
+
+# overview of methylation landscape 5hmC
+
+##TSS
+
+```{r}
+TSS <- fread("ref/biomaRT_TSS_hg38_20MAR2024.txt") %>%
+  filter(`Chromosome/scaffold name` %in% as.character(seq(0,22)),
+         `RefSeq match transcript (MANE Select)` !="")%>%
+  dplyr::select(chrom =`Chromosome/scaffold name`, TSS = `Transcription start site (TSS)`, Gene_name = `Gene name` ) %>%
+  mutate(chrom = paste0("chr", chrom),
+         TSS_start = TSS- 10000, TSS_end = TSS+ 10000)
+
+
+TSS_annotation <- na.omit(TSS %>%
+  left_join(lr_5hmc_filt, by = join_by(chrom==chrom, TSS_start <= start, TSS_end >= start)))
+
+TSS_annotation %>%
+  mutate(distance = start - TSS,
+         bin = round(distance/100)) %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "methylation") %>%
+  group_by(Sample, bin) %>%
+  summarise(mean = mean(methylation)) %>%
+  ggplot(aes(x = bin /10, y = mean, color = Sample))+
+  geom_line()+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  xlab("Relative to TSS (kb)")+
+  ylab("Average Methylation %")+
+  theme(legend.position = "bottom")
+         
+ggsave("plots/Me/TSS_line_5hmc.pdf", width = 10, height = 7)
+
+
+library(scattermore)
+TSS_annotation %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "methylation") %>%
+  mutate(pos = start -TSS) %>%
+  group_by(Sample) %>%
+  group_map( ~ ggplot(.x, aes(x = pos, y = methylation))+
+  geom_scattermore(alpha = 0.1))
+  
+
+
+TSS_plots <- TSS_annotation %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "methylation") %>%
+  mutate(pos = (start -TSS)/1000) %>%
+  group_by(Sample) %>%
+  group_map( ~ ggplot(.x, aes(x = pos, y = methylation))+
+               geom_bin2d(bins = 70) +
+  scale_fill_continuous(type = "viridis",
+                        trans = scales::log10_trans(), breaks = 10^seq(0,5), labels = 10^seq(0,5)) +
+  ylim(c(0,100))+
+  xlab("Relative to TSS (kb)")+
+  theme_bw()+
+    theme(legend.position = "bottom")+
+    ggtitle(unique(.y)))
+
+ggarrange(plotlist = TSS_plots, nrow = 3, ncol = 2)
+
+ggsave("plots/Me/TSS_individual_profile_5hmc.pdf", height = 16, width = 10)
+```
+
+### island shore shelf
+
+```{r}
+ucsc_island_annot <- fread("ref/cpg_islands_ucsc.bed") 
+
+CpG_annot <- ucsc_island_annot %>%
+  dplyr::select(chrom, chromStart,chromEnd, name) %>%
+  mutate(chrom = factor(chrom, levels = paste0("chr", seq(0, 22)))) %>%
+  filter(!is.na(chrom))
+
+
+lr_5hmc_island <- lr_5hmc_filt %>%
+  left_join(CpG_annot %>%
+              mutate(chromStart_ext = chromStart-4000,
+                     chromEnd_ext = chromEnd+4000,), by = join_by(chrom == chrom, start >= chromStart_ext, start <= chromEnd_ext))
+
+
+island_coverage <- lr_5hmc_island %>%
+  filter(!is.na(name)) %>%
+  filter(start >= chromStart, start <= chromEnd) %>%
+  group_by(chrom, chromStart, chromEnd, name) %>%
+  summarise(n= n()) %>%
+  left_join(ucsc_island_annot %>%
+              dplyr::select(chrom, chromStart, chromEnd, name, cpgNum))
+
+
+lr_5hmc_island %>%
+  filter(!is.na(name)) %>%
+  mutate(island_bin_size = (chromEnd-chromStart)/10,
+         bin = case_when(start < chromStart ~ floor((start- chromStart+4000)/200),
+                         start >=chromStart & start <chromEnd ~ floor((start-chromStart)/island_bin_size)+20,
+                         start >= chromEnd ~ floor((start -chromEnd)/200) + 30)) %>%
+  group_by(bin) %>%
+  summarise(OVCAR8_LP_A6_30 = mean(OVCAR8_LP_A6_30),
+            OVCAR8 = mean(OVCAR8),
+            UWB1_BRCA1 = mean(UWB1_BRCA1),
+            UWB1 = mean(UWB1),
+            WEHI_CS62 = mean(WEHI_CS62)) %>%
+  ungroup() %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "Methylation") %>%
+  ggplot(aes(x = bin, y = Methylation, color = Sample, group = Sample)) +
+  geom_line()+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  ggtitle("all CpG island")
+  
+ggsave("plots/Me/CpG_island_all_binned_5hmc.pdf")
+
+
+mat <- lr_5hmc_island %>%
+  filter(!is.na(name)) %>%
+  mutate(island_bin_size = (chromEnd-chromStart),
+         bin = case_when(start < chromStart ~ (start- chromStart),
+                         start >=chromStart & start <chromEnd ~ (start-chromStart)/island_bin_size*2000,
+                         start >= chromEnd ~ (start -chromEnd) + 2000),
+         name = paste(chrom, chromStart, sep = "_")) %>%
+  pivot_longer(cols = all_of(sample_list),values_to = "Methylation", names_to = "Sample") %>%
+  group_by(Sample) %>%
+  group_map(~ ggplot(., aes(x = bin, y = name, color = Methylation)) +
+                       geom_scattermore(pointsize = 0)+
+              theme_bw()+
+              theme(axis.ticks.y = element_blank(), axis.text.y = element_blank())+
+              scale_color_distiller(palette= "YlOrBr", direction = 1, limits = c(0, 5))+
+              ylab("CpG Island")+
+              scale_x_continuous(breaks = c(-4000, -2000, 0, 2000, 4000, 6000), 
+                                 labels = c("-4000", "-2000", "left", "right", "2000", "4000"))+
+              ggtitle(unique(.y)))
+
+pdf("plots/Me/CpG_island_binned_all_sites_5hmc.pdf", height = 15, width = 17)
+ggarrange(plotlist = mat, nrow = 1, common.legend = T ,legend = "bottom")
+dev.off()
+```
+
+### island shore shelf boxplot
+
+```{r}
+lr_5hmc_island %>%
+  mutate(location = case_when(
+    is.na(name) ~ "Open Sea",
+    start < chromStart & (chromStart - start) < 2000 ~ "N_Shore",
+        start < chromStart & (chromStart - start) <=4000 ~ "N_Shelf",
+        start > chromEnd & (start - chromEnd) < 2000 ~ "S_Shore",
+         start > chromEnd & (start - chromEnd) <= 4000 ~ "S_Shelf",
+        TRUE ~ "Island"),
+        location = factor(location ,levels = c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf"))) %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "Methylation") %>%
+  ggplot(aes(x = Sample, y = Methylation, color = Sample))+
+  geom_boxplot()+
+  facet_grid(cols = vars(location))+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom",axis.text.x = element_text(angle = 60, hjust = 1))
+
+ggsave("plots/Me/CpG_island_location_boxplot.pdf", width =12, height = 7)
+
+lr_5hmc_island %>%
+  mutate(location = case_when(is.na(name) ~ "Open_Sea",
+    start < chromStart & (chromStart - start) < 2000 ~ "N_Shore",
+        start < chromStart & (chromStart - start) <=4000 ~ "N_Shelf",
+        start > chromEnd & (start - chromEnd) < 2000 ~ "S_Shore",
+         start > chromEnd & (start - chromEnd) <= 4000 ~ "S_Shelf",
+        TRUE ~ "Island"),
+        location = factor(location ,levels = c("N_Shelf", "N_Shore", "Island", "S_Shore", "S_Shelf", "Open_Sea"))) %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "Methylation") %>%
+  ggplot(aes(x = Sample, y = Methylation, color = Sample))+
+  geom_violin()+
+  facet_grid(cols = vars(location))+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom",axis.text.x = element_text(angle = 60, hjust = 1))
+ggsave("plots/Me/CpG_island_location_violinplot_5hmc.pdf", width =15, height = 7)
+```
+
+### promoter overlapped island
+
+```{r}
+#TSS intersected
+promoter <- fread("ref/human_epdnew_eu9NP.bed") %>%
+  `colnames<-`(c("chrom", "promoterStart", "promoterEnd", "promoterName", "score", "strand"))
+
+promoter_annotation <-CpG_annot %>%
+  left_join(promoter, by =join_by(chrom == chrom, chromStart <=promoterStart, chromEnd >= promoterEnd) )%>%
+  group_by(chrom, chromStart, chromEnd, name) %>%
+  summarise(promoter_overlap = sum(!is.na(promoterName))>0)
+
+lr_5hmc_island %>%
+  filter(!is.na(name)) %>%
+  left_join(promoter_annotation) %>%
+  mutate(promoter_overlap = paste0("Promoter Overlapped:", promoter_overlap)) %>%
+  mutate(island_bin_size = (chromEnd-chromStart)/10,
+         bin = case_when(start < chromStart ~ floor((start- chromStart+4000)/200),
+                         start >=chromStart & start <chromEnd ~ floor((start-chromStart)/island_bin_size)+20,
+                         start >= chromEnd ~ floor((start -chromEnd)/200) + 30)) %>%
+  group_by(bin, promoter_overlap) %>%
+  summarise(OVCAR8_LP_A6_30 = mean(OVCAR8_LP_A6_30),
+            OVCAR8 = mean(OVCAR8),
+            UWB1_BRCA1 = mean(UWB1_BRCA1),
+            UWB1 = mean(UWB1),
+            WEHI_CS62 = mean(WEHI_CS62)) %>%
+  ungroup() %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "Methylation") %>%
+  ggplot(aes(x = bin, y = Methylation, color = Sample, group = Sample)) +
+  geom_line()+
+  scale_color_manual(values = cell_line_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  facet_wrap(~promoter_overlap, nrow =2)
+ggsave("plots/Me/CpG_island_promoter_5hmc.pdf", height = 24, width = 10)
+```
+
+# 5hmc vs 5mc
+
+```{r}
+`5mc_5hmc_island` <- lr_5hmc_island %>%
+  pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "5hmc") %>%
+  left_join(lr_5mc_island %>% 
+              pivot_longer(cols = all_of(sample_list), names_to = "Sample", values_to = "5mc"))
+
+
+`5mc_5hmc_island` %>%
+  ggplot(aes(x = `5hmc`, y = `5mc`))+
+  geom_bin2d(bins = 70) +
+  scale_fill_continuous(type = "viridis",
+                        trans = scales::log10_trans())+
+  facet_wrap(~Sample)
+
+`5mc_5hmc_island` %>%
+  mutate(name = paste(chrom, start, sep = "_"))
+  geom_scattermore()
+  
+```
+
+#Modkit multi DMR
+
+```{r}
+multi_dmr <- Sys.glob("output/dmr/*.bed") %>%
+  map_dfr(~ fread(.x) %>%
+            mutate(comparison = gsub(".bed", "", basename(.x)))) %>%
+  `colnames<-`(c("chrom", "start", "end", "name","score", "sample_a_count", "sample_a_total", "sample_b_count", "sample_b_total", "sample_a_fraction", "sample_b_fraction", "comparison")) %>%
+  mutate(chrom = factor(chrom, levels = paste0("chr", seq(1,22)))) %>%
+  filter(!is.na(chrom), sample_b_total != 0, sample_a_total != 0 )%>%
+   mutate(name= paste(chrom, start,name, sep = "_")) %>%
+  separate(sample_a_fraction, into = c("a5hmc", "a5mc"), sep = ",") %>%
+  separate(sample_b_fraction, into = c("b5hmc", "b5mc"), sep = ",") %>%
+  mutate(a5mc = as.numeric(gsub("m:", "", a5mc)),
+         b5mc = as.numeric(gsub("m:", "", b5mc)),
+         abs_diff = abs(a5mc - b5mc))
+
+multi_dmr  %>%
+  ggplot(aes(x = abs_diff, y = score))+
+  geom_scattermore()+
+  facet_wrap(~comparison)+
+  scale_y_log10()
+ggsave("plots/Me/modkit_island_diff.pdf", width = 12, height = 6)
+
+```
+
+### attempt to subset island different in isogenic pair
+
+```{r}
+iso_diff_ovcar8 <- multi_dmr %>%
+  filter(comparison == "OVCAR8_OVCAR8_LP_A6_30", abs_diff >= 25) %>%
+  pull(name) %>%
+  unique()
+
+
+iso_diff_uwb1 <- multi_dmr %>%
+  filter(comparison == "UWB1_UWB1_BRCA1", abs_diff >= 25) %>%
+  pull(name) %>%
+  unique()
+
+library(ggvenn)
+ggvenn(list(ovcar8_diff = iso_diff_ovcar8, uwb1_diff= iso_diff_uwb1))
+
+
+mat <- multi_dmr %>%
+  dplyr::select(name,chrom, start, end, score,  a5mc, b5mc, comparison) %>%
+  pivot_longer(cols = c("a5mc", "b5mc"), names_to = "name1", values_to = "5mc") %>%
+  mutate(a5mc = case_when(startsWith(comparison, "OVCAR8_LP_A6_30_") ~"OVCAR8_LP_A6_30",
+                          startsWith(comparison, "OVCAR8_") ~"OVCAR8",
+                          startsWith(comparison, "UWB1_BRCA1_") ~"UWB1_BRCA1",
+                          startsWith(comparison, "UWB1_") ~"UWB1"),
+         b5mc = case_when(endsWith(comparison, "_UWB1") ~"UWB1",
+                          endsWith(comparison, "_UWB1_BRCA1") ~"UWB1_BRCA1",
+                          endsWith(comparison, "_WEHI_CS62") ~"WEHI_CS62",
+                          endsWith(comparison, "_OVCAR8_LP_A6_30") ~"OVCAR8_LP_A6_30")) %>%
+  pivot_longer(cols =c("a5mc", "b5mc"), names_to = "name2", values_to = "Sample" ) %>%
+  filter(name1 == name2) %>%
+  dplyr::select(name, `5mc`, Sample)%>%
+  distinct() %>%
+  pivot_wider(names_from = "Sample", values_from = "5mc") %>%
+  distinct() %>%
+  column_to_rownames("name")
+
+Heatmap(mat[iso_diff_ovcar8,], show_row_names = F, cluster_columns = F,
+        column_order = c("OVCAR8_LP_A6_30", "OVCAR8", "UWB1", "UWB1_BRCA1", "WEHI_CS62"))
+
+Heatmap(mat[iso_diff_uwb1,], show_row_names = F, cluster_columns = F,
+        column_order = c("OVCAR8_LP_A6_30", "OVCAR8", "UWB1", "UWB1_BRCA1", "WEHI_CS62"))
+
+Heatmap(mat[intersect(iso_diff_uwb1, iso_diff_ovcar8),], show_row_names = F, cluster_columns = F,
+        column_order = c("OVCAR8_LP_A6_30", "OVCAR8", "UWB1", "UWB1_BRCA1", "WEHI_CS62"))
+
+```
+
+```{r}
+matched_base <- fread("output/dmr_pb/single_base_matched_dmr.bed")
+
+matched_base <-matched_base  %>%
+ `colnames<-`(c("chrom", "start", "end", "name","score", "sample_a_count", "sample_a_total", "sample_b_count", "sample_b_total", "sample_a_fraction", "sample_a_percent", "sample_b_percent", "sample_b_fraction", "MAP_based_p_value", "effect_size","balanced_map_based_p_value", "balanced_effect_size", "per-replicate_p_value", "per_replicate_effect_size")) %>%
+  mutate(chrom = factor(chrom, levels= paste0("chr", seq(1,22))),
+         name = paste(chrom, start, sep = "_")) %>%
+  filter(!is.na(chrom))
+
+matched_base %>%
+  ggplot(aes(x = balanced_map_based_p_value, y = balanced_effect_size))+
+  geom_scattermore()+
+  geom_vline(xintercept = 0.05)
+
+
+
+isogenic_diff <- matched_base %>%
+  filter(balanced_map_based_p_value <= 0.05,
+         balanced_effect_size >= 0.25) %>%
+  pull(name) %>%
+  unique()
+
+isogenic_diff_df <- lr_5mc_filt %>%
+  mutate(name = paste(chrom, start, sep = "_")) %>%
+  filter(name %in% isogenic_diff) %>%
+  dplyr::select(all_of(sample_list))
+
+library(fastcluster)
+
+row_hc = fastcluster::hclust.vector(as.matrix(isogenic_diff_df), method='single')
+
+save(row_hc, file = "cluster.RData")
+```
+The `echo: false` option disables the printing of code (only output is displayed).

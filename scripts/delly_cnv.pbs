@@ -1,0 +1,17 @@
+#PBS -N delly
+#PBS -r n
+#PBS -l mem=48GB,walltime=30:00:00,ncpus=2
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+module load singularity/3.7.1
+module load samtools/1.17
+export OMP_NUM_THREADS=2
+
+dir="/working/lab_olgak/lijunX/20240131_Cell_line_ONT"
+reference_fa="/working/lab_nicw/jiaZ/data/genome/reference.fasta"
+tumour=wehi_cs62_sup_mapped.bam
+map=$HOME/local/Homo_sapiens.GRCh38.dna.primary_assembly.fa.r101.s501.blacklist.gz
+cd $dir
+
+singularity exec $HOME/local/delly_v1.2.6.sif delly cnv -a -g $reference_fa -m $map -c delly_cnv.cov.gz -o delly_cnv.bcf wehi_cs62_sup_mapped.bam

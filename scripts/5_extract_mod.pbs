@@ -1,0 +1,41 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=30:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load longread/python39venv
+module load samtools/1.17
+
+
+mkdir -p "${wk_dir}/output/${SampleID}/Me"
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+me_pileup="${wk_dir}/output/${SampleID}/Me/${SampleID}_pileup.bed"
+modkit_log="${wk_dir}/output/${SampleID}/Me/${SampleID}_modkit"
+me_extract="${wk_dir}/output/${SampleID}/Me/${SampleID}_extract_reads.tsv"
+me_summary="${wk_dir}/output/${SampleID}/Me/${SampleID}_modkit.summary"
+
+
+/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit pileup $bam_mapped $me_pileup --cpg --ref $reference_fa --combine-strands --threads 12 --log-filepath ${modkit_log}_pileup.log
+sed -e 's/ /\t/g' $me_pileup > ${wk_dir}/output/${SampleID}/Me/${SampleID}_pileup_tab.bed
+bgzip -k ${me_pileup}
+tabix -p bed ${me_pileup}.gz
+rm ${me_pileup}
+
+/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit extract -t 12 --log-filepath ${modkit_log}_extract.log $bam_mapped $me_extract
+
+/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit summary -t 12 $bam_mapped > $me_summary
+
+
+
+
+

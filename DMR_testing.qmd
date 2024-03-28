@@ -1,0 +1,50 @@
+---
+title: "methylseekR"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+library(data.table)
+library(MethylSeekR)
+library(GenomicRanges)
+library(tidyverse)
+library(BSgenome.Hsapiens.UCSC.hg38)
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+snpdb <- fread("/reference/dbsnp/150_hg38/All_20170710.vcf", skip = "#CHROM", select= c("#CHROM", "POS"))
+snpdb_gr <- makeGRangesFromDataFrame(snpdb, ignore.strand = T, seqnames.field = "#CHROM", start.field = "POS", end.field = "POS")
+
+methylome <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/EpiRR/ENCFF889UGC.bed.gz") %>%
+  mutate(M= round(V10 *V11 / 100, 0)) %>%
+  dplyr::select(seqname = V1, POS = V2, `T` =V5, M) %>%
+  makeGRangesFromDataFrame(., keep.extra.columns=T, ignore.strand = T, start.field = "POS", end.field = "POS")
+
+
+meth.gr <- removeSNPs(methylome, snpdb_gr)
+
+```
+```{r}
+sLengths = seqlengths(Hsapiens)
+PMDsegments.gr <- segmentPMDs(m = meth.gr, chr.sel= "chr17", seqLengths = sLengths, num.cores = 1)
+
+savePMDSegments(PMDs = PMDsegments.gr, GRangesFilename = "EpiRR_ovary_PMDs.gr.rds", TableFilename = "EpiRR_ovary_PMDs.gr.tab")
+
+
+
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).

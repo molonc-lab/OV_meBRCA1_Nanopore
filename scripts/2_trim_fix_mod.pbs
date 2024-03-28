@@ -1,0 +1,34 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=30:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load longread/python39venv
+module load samtools/1.17
+
+cd $wk_dir
+
+bam_input="output/${SampleID}/${SampleID}_sup.bam"
+bam_input_sorted="output/${SampleID}/${SampleID}_sup_sorted.bam"
+bam_trimmed="output/${SampleID}/${SampleID}_trimmed_sorted.bam"
+bam_repaired="output/${SampleID}/${SampleID}_trimmed_repaired.bam"
+
+samtools fastq -T"*" $bam_input |\
+/working/lab_nicw/jiaZ/local/chopper/chopper --headcrop 40 --tailcrop 20 --threads 12 |\
+awk '/^@.*MN:i:[0-9]+/ {{ match($0, /MN:i:([0-9]+)/, num);sub(/MN:i:[0-9]+/, "MN:i:" num[1]-60) }}  1' |\
+samtools import -T"*" - |\
+samtools sort -@12 -n > $bam_trimmed
+
+samtools sort -@12 -n $bam_input > $bam_input_sorted
+
+/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit repair --donor-bam $bam_input_sorted \
+--acceptor-bam $bam_trimmed \
+--log-filepath "${wk_dir}/output/${SampleID}/modkit_repair.log" --output-bam $bam_repaired
+
+rm $bam_input_sorted
+rm $bam_trimmed
+
+

@@ -1,0 +1,26 @@
+#PBS -r n
+#PBS -l mem=36GB,walltime=30:00:00,ncpus=24
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load samtools/1.17
+module load minimap2/2.26
+module load htslib/1.19.1
+
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+
+bam_repaired="${wk_dir}/output/${SampleID}/${SampleID}_trimmed_repaired.bam"
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped"
+
+
+samtools fastq -T"*" $bam_repaired | \
+minimap2 -ax map-ont -y --MD -t 24 $reference_fa - | \
+samtools sort -@8 -O BAM --write-index -o ${bam_mapped}.bam##idx##${bam_mapped}.bai
+

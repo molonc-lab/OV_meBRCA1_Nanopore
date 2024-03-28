@@ -1,0 +1,37 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=30:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load samtools/1.17
+module load mosdepth/0.2.9
+module load python/3.6.1
+
+modkit="/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit"
+phased_bam="${wk_dir}/output/${SampleID}/whatshap/${SampleID}_phased.bam"
+phased_sorted="${wk_dir}/output/${SampleID}/whatshap/${SampleID}_phased_sorted"
+subset_tagged_bam="${wk_dir}/output/${SampleID}/whatshap/${SampleID}_phased_w_tag.bam"
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+
+
+samtools sort -@12 -O BAM --write-index -o ${phased_sorted}.bam##idx##${phased_sorted}.bai $phased_bam
+
+$modkit pileup ${phased_sorted}.bam ${phased_sorted}.bed --cpg --ref $reference_fa \
+--combine-strands --threads 12 --partition-tag HP --prefix haplotyped \
+--log-filepath ${phased_sorted}_pileup.log
+
+# subset reads with haplotag
+samtools view -e '[HP]==1 || [HP] ==2' -b -@12 -o ${subset_tagged_bam} ${phased_sorted}.bam
+
+samtools index -@12 ${subset_tagged_bam}
+
+mosdepth -n -t 12 -b 1000000 ${wk_dir}/output/${SampleID}/coverage/${SampleID}_phased ${subset_tagged}.bam
+
+rm $phased_bam

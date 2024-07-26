@@ -10,7 +10,8 @@ module load samtools/1.17
 export OMP_NUM_THREADS=2
 
 reference_fa="/working/lab_nicw/jiaZ/data/genome/reference.fasta"
-bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+#bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_filtered_mapped.bam"
 blacklist="/mnt/backedup/home/lijunX/local/Homo_sapiens.GRCh38.dna.primary_assembly.fa.r101.s501.blacklist.gz"
 
 mkdir -p ${wk_dir}/output/${SampleID}/SV

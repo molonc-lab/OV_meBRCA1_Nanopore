@@ -1,0 +1,16 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=30:00:00,ncpus=2
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load samtools/1.17
+
+bam_suffix="${wk_dir}/output/${SampleID}/${SampleID}"
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/SAMTOOLS_1.2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+
+samtools idxstats ${bam_suffix}_mapped.bam | cut -f 1 | grep -v "mus_GRCm39" | xargs samtools view -T $reference_fa -b ${bam_suffix}_mapped.bam > ${bam_suffix}_filtered_mapped.bam
+
+samtools index ${bam_suffix}_filtered_mapped.bam

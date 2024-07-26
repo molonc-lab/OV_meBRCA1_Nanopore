@@ -1,0 +1,46 @@
+#PBS -l mem=100GB,walltime=48:00:00,ncpus=2
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load singularity/3.7.1
+
+mkdir -p ${wk_dir}/output/${SampleID}/deepvariants
+
+reference_fa="/working/lab_nicw/jiaZ/data/genome/reference.fasta"
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_filtered_mapped.bam"
+output_file_prefix="${wk_dir}/output/${SampleID}/deepvariants/${SampleID}"
+repeat_rmask="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/indel.repeat.hg38.mask"
+
+singularity run /working/lab_nicw/jiaZ/imgs/deepvariant/deepvariant_1.6.1.sif \
+run_deepvariant \
+--model_type ONT_R104 \
+--ref=$reference_fa \
+--reads ${bam_mapped} \
+--sample_name OVCAR8 \
+--output_vcf ${output_file_prefix}.vcf.gz \
+--output_gvcf ${output_file_prefix}.g.vcf.gz \
+--num_shards 24
+
+less ${output_file_prefix}.vcf.gz | grep "^#" >${output_file_prefix}.indel.vcf
+less ${output_file_prefix}.vcf.gz | grep "PASS"| awk '!($5 ~ ",") && length($4)>=5 && length($4)<=50 {print $0}' >> ${output_file_prefix}.indel.vcf
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/GATK_3.3-0/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+module load java/OpenJDK-21.0.1
+qannotate="java -Xmx20G -jar /software/adamajava/adamajava-current/build/lib/qannotate.jar"
+
+$qannotate --mode hom -i ${output_file_prefix}.indel.vcf -o ${output_file_prefix}.indel.HOM.vcf -d $reference_fa
+$qannotate --mode indelConfidence -i ${output_file_prefix}.indel.HOM.vcf \
+-o ${output_file_prefix}.HOM.IC.vcf -d $repeat_rmask --minMutantRate 1 --minReadCount 1
+
+rm ${output_file_prefix}.indel.HOM.vcf
+rm ${output_file_prefix}.indel.vcf
+
+less ${output_file_prefix}.HOM.IC.vcf | grep "^#" > ${output_file_prefix}.filtered.vcf
+less ${output_file_prefix}.HOM.IC.vcf | grep -v "^#" | grep -v "REPEAT"  | awk '{split($8, a, "[=,;]"); if (a[2]<= 10) print $0}' >> ${output_file_prefix}.filtered.vcf
+
+
+module load htslib/1.19.1
+bgzip ${output_file_prefix}.filtered.vcf
+tabix -f ${output_file_prefix}.filtered.vcf.gz

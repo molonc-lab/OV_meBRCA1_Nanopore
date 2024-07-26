@@ -1,0 +1,54 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=60:00:00,ncpus=10
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+
+module load singularity/3.7.1
+module load samtools/1.17
+module load bcftools/1.19
+export OMP_NUM_THREADS=10
+
+reference_fa="/working/lab_nicw/jiaZ/data/genome/reference.fasta"
+hg38_map="/mnt/backedup/home/lijunX/local/Homo_sapiens.GRCh38.dna.primary_assembly.fa.r101.s501.blacklist.gz"
+
+# OVCAR8
+singularity exec $HOME/local/delly_v1.2.6.sif delly cnv -u \
+-o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/OVCAR8_delly_cnv_out.cov.bcf \
+-v /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8_LP_A6_30/CNV/OVCAR8_LP_A6_30_delly_cnv_out.cov.bcf \
+-g $reference_fa \
+-m $hg38_map \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped.bam
+
+bcftools merge -m id -O b \
+-o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/OVCAR8_iso_pair.bcf \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8_LP_A6_30/CNV/OVCAR8_LP_A6_30_delly_cnv_out.cov.bcf \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/OVCAR8_delly_cnv_out.cov.bcf
+
+bcftools index OVCAR8_iso_pair.bcf 
+
+singularity exec $HOME/local/delly_v1.2.6.sif delly classify -p -f somatic \
+-o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/OVCAR8_iso_change.bcf \
+-s /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/OVCAR8_sample.tsv \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/OVCAR8_iso_pair.bcf
+
+
+# UWB1
+singularity exec $HOME/local/delly_v1.2.6.sif delly cnv -u \
+-o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/UWB1_delly_cnv_out.cov.bcf \
+-v /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1_BRCA1/CNV/UWB1_BRCA1_delly_cnv_out.cov.bcf \
+-g $reference_fa \
+-m $hg38_map \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/UWB1_mapped.bam
+
+bcftools merge -m id -O b \
+-o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/UWB1_iso_pair.bcf \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1_BRCA1/CNV/UWB1_BRCA1_delly_cnv_out.cov.bcf \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/UWB1_delly_cnv_out.cov.bcf
+
+bcftools index UWB1_iso_pair.bcf 
+
+singularity exec $HOME/local/delly_v1.2.6.sif delly classify -p -f somatic \
+-o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/UWB1_iso_change.bcf \
+-s /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/UWB1_sample.tsv \
+/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/UWB1_iso_pair.bcf

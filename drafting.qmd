@@ -1,0 +1,365 @@
+---
+title: "nanopore_meBRCA1"
+format: html
+editor: visual
+---
+
+
+```{r}
+#| echo: false
+#| include: false
+library(signal)
+library("data.table")
+library("ComplexHeatmap")
+library("ggplot2")
+library("tidyverse")
+library("purrr")
+library("scales")
+library("ggfortify")
+library("ggrepel")
+library(vroom)
+library(matrixStats)
+library(factoextra)
+library(corrplot)
+library(ggpubr)
+library("furrr")
+library(scattermore)
+library(circlize)
+library(tidyfast)
+library(dplyr)
+
+library(future.apply)
+```
+```{r}
+cell_line = list("OVCAR8", "OVCAR8_LP_A6_30", "UWB1", "UWB1_BRCA1", "WEHI_CS62")
+sample_type_palette = c("Cell-line"="#b5e2fa", "Xenograft" = "#ffd6a5")
+hrd_palette= c("HRD" ="#CC79A7" , "HRR" = "#009E73")
+hrd_sample_list <- list("134011_1910_T4", "134062_9174_T4", "SFRC01585S1_2163_T3", "WEHI_CS62", "OVCAR8_LP_A6_30")
+methylation_palette = c("Me" = "red", "Un" = "blue")
+```
+
+```{r}
+pdx11 <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/QC/*_summary.tsv") %>%
+  map_dfr(~ fread(.x, select = "mean_qscore_template") %>%
+            mutate(sample = gsub("_summary.tsv", "", basename(.x)))) 
+
+nanopore_len <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/QC/*_summary.tsv") %>%
+  map_dfr(~ fread(.x, select = "sequence_length_template") %>%
+            mutate(sample = gsub("_summary.tsv", "", basename(.x)))) 
+
+
+# subset for testing 
+pdx11_sub <- pdx11 %>%
+  group_by(sample) %>%
+  sample_n(1000) %>%
+  ungroup()
+
+qscore_sub <- pdx11_sub %>%
+  mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "Xenograft")) %>%
+  ggplot(aes(y = mean_qscore_template, sample, fill = sample_type))+
+  geom_boxplot()+
+  theme_bw()+
+  facet_wrap(~sample_type, scale = "free_x", strip.position = "bottom")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.background = element_blank(),
+        legend.position = "none",
+       strip.text.x = element_blank())+
+  ylab("Mean Base Quality Score")+
+  scale_fill_manual(values = sample_type_palette)
+
+
+# subset for testing 
+library(ggridges)
+nanopore_len_sub <- nanopore_len%>%
+  group_by(sample) %>%
+  sample_n(1000) %>%
+  ungroup()
+
+
+
+# actual plotting 
+len_plot <- nanopore_len %>%
+  mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "Xenograft")) %>%
+  ggplot(aes(x = sequence_length_template, y = sample, fill = sample_type))+
+  stat_density_ridges(stat = "density")+
+  facet_wrap(~sample_type, scale = "free_y", strip.position = "right", nrow = 2)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        axis.title.y = element_blank(),
+        strip.background = element_blank(),
+       legend.position = "none",
+       strip.text.y = element_blank())+
+  scale_x_continuous(trans = "log10")+
+  scale_fill_manual(values = sample_type_palette)+
+  xlab("Read Length (bp)")
+
+
+
+qscore <- pdx11 %>%
+  mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "Xenograft")) %>%
+  ggplot(aes(y = mean_qscore_template, sample, fill = sample_type))+
+  geom_boxplot()+
+  theme_bw()+
+  facet_wrap(~sample_type, scale = "free_x", strip.position = "bottom")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.background = element_blank(),
+       strip.text.x = element_blank(),
+       legend.position = "none")+
+  ylab("Mean Base Quality Score")+
+  scale_fill_manual(values = sample_type_palette)
+  
+
+```
+# QC plots 
+```{r}
+coverage <- Sys.glob("output/*/coverage/*mosdepth.summary.txt")%>%
+  map_dfr(~ fread(.x)%>%
+            mutate(sample = gsub("_unphased.mosdepth.summary.txt", "", basename(.x)))) %>%
+  mutate(chrom = factor(chrom, level = paste0("chr", seq(1,22)))) %>%
+  filter(!is.na(chrom))
+
+
+coverage_plot <-coverage %>%
+  group_by(sample) %>%
+  summarise(coverage = round(sum(mean *bases / sum(bases)), 0)) %>%
+  ungroup()  %>%
+  mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "Xenograft")) %>%
+  ggplot(aes(x = sample, y = coverage, fill = sample_type))+
+  geom_bar(stat = "identity", color = "black")+
+  facet_wrap(~sample_type, scale = "free_x", strip.position = "bottom")+
+  theme_bw()+
+  geom_text(aes(label=paste0(coverage, "x")), vjust=0)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.background = element_blank(),
+       strip.text.x = element_blank(),
+       axis.ticks.y = element_blank(),
+       legend.position = "none",
+       axis.text.y = element_blank())+
+  ylab("Averaged Depth")+
+  scale_fill_manual(values = sample_type_palette, "Sample")
+  
+
+merged_plot <- ggarrange(len_plot,ggarrange(coverage_plot+
+            theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+                  axis.title.x = element_blank()), qscore, nrow = 2, heights = c(0.3, 0.7), align= "v"), common.legend = T, legend = "bottom")
+ggsave(plot = merged_plot, filename = "plots/nanopore_qc.pdf",  width = 210, height = 297, units = "mm")
+```
+#PDX qc filtration
+```{r}
+
+
+```
+
+# brca1 plotting  -+-500bps
+```{r}
+brca1 <- Sys.glob("output/*/Me/*_brca1_mod.summary")%>%
+  map_dfr(~fread(.) %>%
+            mutate(sample = gsub("_brca1_mod.summary", "", basename(.x)))) %>%
+  filter(mod_code == "m") 
+
+
+PLOTLIST <- brca1 %>%
+  mutate(Meth = if_else(mod_qual >0.5, "Me", "Un"),
+         HRD = if_else(sample %in% hrd_sample_list, "HRD", "HRR"),
+         HRD = factor(HRD, levels = c("HRR", "HRD"))) %>%
+  # filter(ref_position >=43125336, ref_position <= 43170245,
+  #        base_qual >20, !inferred) %>%
+    filter(ref_position >=43125336-200, ref_position <= 43125457+200,
+         base_qual >20, !inferred) %>%
+  group_by(ref_position, sample, HRD) %>%
+  filter(n()>=3) %>%
+  summarise(
+    number = n(),
+    Me_percent = sum(Meth =="Me")/ n()) %>%
+  ungroup() %>%
+  group_by(HRD) %>%
+  group_map(~ ggplot(.x, aes(x = ref_position,y = Me_percent, color = HRD))+
+  geom_line()+
+  geom_point(size = 0.5)+
+  facet_wrap(~sample, nrow = 8, dir = "v")+
+    theme_minimal()+
+    theme(axis.title.x = element_blank())+
+ annotate("rect",xmin=43125336,xmax=43125457,ymin=-Inf,ymax=Inf,alpha=0.1,fill="black")+
+  # annotate("rect", xmin = 43126118, xmax= 43126443, ymin=-Inf,ymax=Inf,alpha=0.1,fill="yellow")+
+  scale_y_continuous(labels = scales::percent, "Methylation (%)")+
+  scale_color_manual(values =hrd_palette, drop =F, "HR Status"), .keep = T)
+
+library(patchwork)
+layout <-"
+AB
+AB
+AB
+AB
+AB
+A#
+A#
+A#
+"
+PLOTLIST[[1]]+PLOTLIST[[2]]+ plot_layout(design = layout, guides = "collect")&
+  theme(legend.position='bottom')
+
+ggsave("plots/200bp_amplicon.pdf",  width = 210, height = 297, units = "mm" )
+
+
+
+library(ggbeeswarm)
+brca1 %>%
+  mutate(Meth = if_else(mod_qual >0.5, "Me", "Un"),
+         HRD = if_else(sample %in% hrd_sample_list, "HRD", "HRR"),
+         HRD = factor(HRD, levels = c("HRR", "HRD"))) %>%
+  # filter(ref_position >=43125336, ref_position <= 43170245,
+  #        base_qual >20, !inferred) %>%
+    filter(ref_position >=43126118, ref_position <= 43126443,
+         base_qual >20, !inferred) %>%
+  group_by(ref_position, sample, HRD) %>%
+    group_by(ref_position, sample, HRD) %>%
+  filter(n()>=3) %>%
+  summarise(
+    number = n(),
+    Me_percent = sum(Meth =="Me")/ n()) %>%
+  ungroup() %>%
+  ggplot(aes(x = sample, y = Me_percent, color = HRD))+
+  geom_violin()+
+  geom_beeswarm(cex = 0.5, size = 0.5)+
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               color = "black",
+               width = 0.1)+
+  scale_color_manual(values =hrd_palette, drop =F, "HR Status")+
+  facet_wrap(~HRD, scales = "free_x")+
+  theme_bw()+
+  scale_y_continuous(labels = scales::percent, "Methylation (%)")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.background = element_blank(),
+       strip.text.x = element_blank())
+  ggsave("plots/closest_island.pdf", height = 5, width = 8)
+ 
+```
+
+# brca1 plotting individual reads
+```{r}
+brca1_reads <- brca1 %>%
+  mutate(Meth = if_else(mod_qual >0.5, "Me", "Un"),
+         HRD = if_else(sample %in% hrd_sample_list, "HRD", "HRR"),
+         HRD = factor(HRD, levels = c("HRR", "HRD"))) %>%
+  # filter(ref_position >=43125336, ref_position <= 43170245,
+  #        base_qual >20, !inferred) %>%
+    filter(ref_position >=43125336-200, ref_position <= 43125457+200,
+         base_qual >20, !inferred) %>%
+  group_by(read_id) %>%
+  filter(sum(ref_position <= 43125457 & ref_position >=43125336)>2 ) %>%
+  mutate(meth_count = sum(Meth == "Me")) %>%
+  ungroup() 
+
+
+plot_list <-brca1_reads%>%
+  mutate(read_id = factor(read_id, levels = unique(brca1_reads$read_id[order(brca1_reads$ref_mod_strand, brca1_reads$meth_count)])),
+         Meth = factor(Meth, levels = c("Me", "Un"))) %>%
+  group_by(HRD, sample) %>%
+  group_map(~ggplot(.x, aes(y= read_id, x = ref_position, color = Meth))+
+  annotate("rect",xmin=43125336,xmax=43125457,ymin=-Inf,ymax=Inf,alpha=0.1,fill="black")+
+  geom_point(size = 0.3)+
+  facet_wrap(~ref_mod_strand, scales = "free_y", nrow =2)+
+  scale_color_manual(values = methylation_palette, drop = F, "Methylation")+
+    theme_bw()+
+  labs(title = unique(.x$sample))+
+  theme(panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+      strip.text = element_blank(),
+      plot.title = element_text(colour=hrd_palette[unique(.x$HRD)],  face = "bold", hjust = 0.5), 
+        axis.ticks.y = element_blank()), .keep = T)
+
+
+layout <-"
+AI
+BJ
+CK
+DL
+EM
+F#
+G#
+H#
+"
+
+plot_list[[1]]+plot_list[[2]]+plot_list[[3]]+plot_list[[4]]+
+  plot_list[[5]]+plot_list[[6]]+plot_list[[7]]+plot_list[[8]]+
+  plot_list[[9]]+ plot_list[[10]]+ plot_list[[11]]+plot_list[[12]]+
+  plot_list[[13]]+
+  plot_layout(design = layout, guides = "collect")&
+  theme(legend.position='bottom')
+
+ggsave("plots/reads_resolution.pdf",  width = 210, height = 297, units = "mm" )
+
+
+
+
+island_reads <- brca1 %>%
+  mutate(Meth = if_else(mod_qual >0.5, "Me", "Un"),
+         HRD = if_else(sample %in% hrd_sample_list, "HRD", "HRR"),
+         HRD = factor(HRD, levels = c("HRR", "HRD"))) %>%
+  # filter(ref_position >=43125336, ref_position <= 43170245,
+  #        base_qual >20, !inferred) %>%
+    filter(ref_position >=43125336-5000, ref_position <= 43125457,
+         base_qual >20, !inferred) %>%
+  group_by(read_id) %>%
+  filter(sum(ref_position <= 43125457 & ref_position >=43125336)>2 ) %>%
+  mutate(meth_count = sum(Meth == "Me")) %>%
+  ungroup() 
+
+
+plot_list <-island_reads%>%
+  mutate(read_id = factor(read_id, levels = unique(brca1_reads$read_id[order(brca1_reads$ref_mod_strand, brca1_reads$meth_count)])),
+         Meth = factor(Meth, levels = c("Me", "Un"))) %>%
+  group_by(HRD, sample) %>%
+  group_map(~ggplot(.x, aes(y= read_id, x = ref_position, color = Meth))+
+  annotate("rect",xmin=43125336,xmax=43125457,ymin=-Inf,ymax=Inf,alpha=0.1,fill="black")+
+    # annotate("rect", xmin = 43126118, xmax= 43126443, ymin=-Inf,ymax=Inf,alpha=0.1,fill="yellow")+
+  geom_point(size = 0.3)+
+  facet_wrap(~ref_mod_strand, scales = "free_y", nrow =2)+
+  scale_color_manual(values = methylation_palette, drop = F, "Methylation")+
+    theme_void()+
+  labs(title = unique(.x$sample))+
+  theme(panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+      strip.text = element_blank(),
+      plot.title = element_text(colour=hrd_palette[unique(.x$HRD)],  face = "bold", hjust = 0.5), 
+        axis.ticks.y = element_blank()), .keep = T)
+
+
+plot_list[[1]]+plot_list[[2]]+plot_list[[3]]+plot_list[[4]]+
+  plot_list[[5]]+plot_list[[6]]+plot_list[[7]]+plot_list[[8]]+
+  plot_list[[9]]+ plot_list[[10]]+ plot_list[[11]]+plot_list[[12]]+
+  plot_list[[13]]+
+  plot_layout(design = layout, guides = "collect")&
+  theme(legend.position='bottom')
+
+ggsave("plots/reads_resolution_island_forward.pdf",  width = 210, height = 297, units = "mm" )
+```
+
+
+
+```{r}
+library(GenomicFeatures)
+library(Gviz)
+library(org.Hs.eg.db)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+
+txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+txTr <-GeneRegionTrack(txdb, chromosome = "chr17", start = 43125336-500, end = 43125457+500)
+gene(txTr) <- select(org.Hs.eg.db, keys = gene(txTr), keytpe = "ENTREZID", columns= "SYMBOL") %>%
+  pull(SYMBOL)
+
+plotTracks(txTr, transcriptAnnotation = "transcript")
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).

@@ -1,0 +1,30 @@
+#PBS -r n
+#PBS -l mem=100GB,walltime=30:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load longread/python39venv
+module load samtools/1.17
+
+deepvariant_dir=${wk_dir}/output/${SampleID}/deepvariants
+rmsk_vcf=${deepvariant_dir}/${SampleID}.filtered.vcf.gz
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+
+less ${rmsk_vcf} | grep -v "^#" | awk 'BEGIN{OFS = "\t"} {print $1,$2 -500, $2+500, ".", "0", "."}' > ${deepvariant_dir}/modkit_filtered_del_target.bed 
+
+rm ${wk_dir}/output/${SampleID}/Me/${SampleID}_extract_reads.tsv
+
+/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit extract -t 12 \
+--include-bed ${deepvariant_dir}/modkit_filtered_del_target.bed \
+$bam_mapped \
+${wk_dir}/output/${SampleID}/Me/${SampleID}_extract_reads.tsv
+
+
+module purge
+cd /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/scripts
+
+module load python/3.9.13
+python load_reads.py --wk_dir $wk_dir --SampleID $SampleID

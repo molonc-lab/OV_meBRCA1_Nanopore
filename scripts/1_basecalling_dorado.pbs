@@ -1,10 +1,12 @@
 #PBS -r n
-#PBS -l mem=50GB,walltime=300:00:00,ncpus=16,ngpus=1
+#PBS -l mem=100GB,walltime=300:00:00,ncpus=16,ngpus=1
 #PBS -q gpu
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au
 #PBS -v SampleID
 #PBS -v wk_dir
+
+set -e 
 
 module load samtools/1.17
 
@@ -13,11 +15,11 @@ mkdir -p "${wk_dir}/output/${SampleID}/QC"
 
 pod5_files="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/data/${SampleID}/POD5/"
 reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/primary_files/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
-dorado="/working/lab_nicw/jiaZ/local/dorado/dorado-0.5.1-linux-x64/bin/dorado"
+dorado="/mnt/backedup/home/lijunX/local/dorado-0.7.1-linux-x64/bin/dorado"
 
 #model path
-dorado_model="/working/lab_nicw/jiaZ/data/ont_models/dna_r10.4.1_e8.2_400bps_sup@v4.3.0"
-remora_model="/working/lab_nicw/jiaZ/data/ont_models/dna_r10.4.1_e8.2_400bps_sup@v4.3.0_5mCG_5hmCG@v1"
+dorado_model="/mnt/backedup/home/lijunX/local/dorado-0.7.1-linux-x64/models/dna_r10.4.1_e8.2_400bps_sup@v5.0.0"
+remora_model="/mnt/backedup/home/lijunX/local/dorado-0.7.1-linux-x64/models/dna_r10.4.1_e8.2_400bps_sup@v5.0.0_5mCG_5hmCG@v1"
 
 #define output
 bam_output="${wk_dir}/output/${SampleID}/${SampleID}_sup.bam"

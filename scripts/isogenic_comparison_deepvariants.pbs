@@ -1,0 +1,35 @@
+#PBS -r n
+#PBS -l mem=36GB,walltime=48:00:00,ncpus=24
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+module load singularity/3.7.1
+
+reference_fa="/working/lab_nicw/jiaZ/data/genome/reference.fasta"
+
+
+singularity exec /working/lab_nicw/jiaZ/imgs/deepsomatic/deepsomatic_1.6.1.sif \
+run_deepsomatic \
+--model_type=ONT_R104 \
+--ref=$reference_fa \
+--reads_normal=/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped.bam \
+--reads_tumor=/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_mapped.bam \
+--output_vcf=/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/OVCAR8_iso_change.vcf.gz \
+--sample_name_tumor=OVCAR8_LP_A6_30 \
+--sample_name_normal=OVCAR8 \v
+--use_slim_model \
+--num_shards=24 \
+--customized_model=/working/lab_nicw/jiaZ/data/ont_models/dpsomatic_model/weights-143-0.987994.ckpt
+
+singularity exec /working/lab_nicw/jiaZ/imgs/deepsomatic/deepsomatic_1.6.0.sif \
+run_deepsomatic \
+--model_type=ONT_R104 \
+--ref=$reference_fa \
+--reads_normal=/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/UWB1_mapped.bam \
+--reads_tumor=/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1_BRCA1/UWB1_BRCA1_mapped.bam \
+--output_vcf=/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/CNV_isogenic/UWB1_iso_change.vcf.gz \
+--sample_name_tumor=UWB1_BRCA1 \
+--sample_name_normal=UWB1 \
+--num_shards=24 \
+--use_slim_model \
+--customized_model=/working/lab_nicw/jiaZ/data/ont_models/dpsomatic_model/weights-143-0.987994.ckpt

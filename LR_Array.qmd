@@ -155,38 +155,34 @@ RGset_epicv2 <- data.frame(getBeta(RGset_epicv2_prep)) %>%
 
 epiv2_lr <- RGset_epicv2 %>%
   left_join(lr_meth %>%
-              dplyr::select(chr = 1, pos = V3, mod_type =V4, V10))
-epiv2_lr <- epiv2_lr %>%
-  separate(V10, sep = " ", into = c("Nvalid_cov", "fraction_mod", "Nmod", "Ncanonical", "Nother_mod", "Ndelete", "Nfail", "Ndiff", "Nnocall"))
-
+              dplyr::select(chr = chrom, pos = end, mod_type, "Nvalid_cov", "fraction_mod", "Nmod", "Ncanonical", "Nother_mod", "Ndelete", "Nfail", "Ndiff", "Nnocall"))
 epiv2_lr %>%
   filter(mod_type == "m") %>%
-  
   mutate(Nother_mod = as.integer(Nother_mod),
          Nmod =as.integer(Nmod),
          Nvalid_cov = as.integer(Nvalid_cov),
     sum_mod_frac = (Nother_mod+ Nmod)/Nvalid_cov) %>%
-  ggplot(aes(x = sum_mod_frac/100, y = `62_Untreated`))+
-  geom_bin2d(bins = 40)+
+  ggplot(aes(x = sum_mod_frac, y = `62_Untreated`))+
+  geom_bin2d(bins = 60)+
   stat_cor(label.y = 1.1) +
   stat_regline_equation(label.y = 1.05)+scale_fill_distiller(palette = "Spectral", trans = "log2")+
   theme_bw()+
-  xlab("%5mC+5hmC per CpG")+
-  ylab("EPIC V2 beta")
-ggsave("epicv2_vs_lr_5mc_5hmc.pdf")
+  xlab("Nanopore 5mC+5hmC modification per base (%)")+
+  ylab("Methylation array (beta)")
+ggsave("plots/epicv2_vs_lr_5mc_5hmc.pdf", height = 6, width =8)
 
 epiv2_lr %>%
   filter(mod_type == "m") %>%
   mutate(fraction_mod = as.numeric(fraction_mod)) %>%
   ggplot(aes(x = fraction_mod/100, y = `62_Untreated`))+
-  geom_bin2d(bins = 40)+
+  geom_bin2d(bins = 60)+
   stat_cor(label.y = 1.1) +
   stat_regline_equation(label.y = 1.05)+scale_fill_distiller(palette = "Spectral", trans = "log2")+
   theme_bw()+
-  xlab("%5mC+5hmC per CpG")+
+  xlab("%5mC per CpG")+
   ylab("EPIC V2 beta")
 
-ggsave("epicv2_vs_lr_5mc_only.pdf")
+ggsave("plots/epicv2_vs_lr_5mc_only.pdf")
 
 
 epiv2_lr %>%

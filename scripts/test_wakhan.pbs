@@ -1,0 +1,24 @@
+#PBS -r n
+#PBS -l mem=30GB,walltime=40:00:00,ncpus=4
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+mkdir -p ${wk_dir}/output/${SampleID}/wakhan_2
+haplotagged_bam=${wk_dir}/output/${SampleID}/whatshap/${SampleID}_phased_sorted.bam
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+phased_vcf=${wk_dir}/output/${SampleID}/clair3/phased_merge_output.vcf.gz
+
+
+module load conda-envs/base
+conda activate /working/lab_nicw/jiaZ/local/micromanba_envs/wakhan
+python  /working/lab_nicw/jiaZ/local/Wakhan/src/main.py --target-bam $haplotagged_bam \
+--threads 4 \
+--reference $reference_fa \
+--tumor-vcf $phased_vcf \
+--copynumbers-enable True \
+--unphased-reads-coverage-enable True \
+--genome-name $SampleID \
+--without-phasing True \
+--out-dir-plots $wk_dir/output/${SampleID}/wakhan_2

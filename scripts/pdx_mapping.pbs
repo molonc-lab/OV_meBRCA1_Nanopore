@@ -1,0 +1,22 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=30:00:00,ncpus=36
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load samtools/1.17
+module load minimap2/2.26
+
+cd $wk_dir
+
+bam_repaired="output/${SampleID}/${SampleID}_trimmed_repaired.bam"
+reference_fa="${wk_dir}/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+bam_mapped="${wk_dir}/output/PDX_mus_remove/${SampleID}_mapped"
+
+
+samtools fastq -T"*" $bam_repaired | \
+minimap2 -ax map-ont -y --MD -t 24 $reference_fa - | \
+samtools sort -@8 -O BAM --write-index -o ${bam_mapped}.bam##idx##${bam_mapped}.bai
+

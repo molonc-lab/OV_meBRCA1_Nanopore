@@ -31,7 +31,8 @@ bgzip -k ${me_pileup}
 tabix -p bed ${me_pileup}.gz
 rm ${me_pileup}
 
-/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit extract -t 12 --log-filepath ${modkit_log}_extract.log $bam_mapped $me_extract
+#/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit extract -t 12 --log-filepath ${modkit_log}_extract.log $bam_mapped $me_extract
+
 
 /working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit summary -t 12 $bam_mapped > $me_summary
 

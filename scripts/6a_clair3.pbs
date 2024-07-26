@@ -1,0 +1,31 @@
+#PBS -r n
+#PBS -l mem=50GB,walltime=20:00:00,ncpus=20
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load singularity/3.7.1
+module load python/3.9.13
+
+mkdir -p ${wk_dir}/output/${SampleID}/clair3
+
+clair3_image="/working/genomeinfo/share/containers/singularity/clair3-v1.0.4.sif"
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_filtered_mapped.bam"
+#bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+
+singularity exec  $clair3_image \
+run_clair3.sh \
+--bam_fn $bam_mapped \
+--ref_fn $reference_fa \
+--threads=20 \
+--platform="ont" \
+--model_path $HOME/local/r1041_e82_400bps_sup_v430 \
+--enable_phasing \
+--longphase_for_phasing \
+--output=${wk_dir}/output/${SampleID}/clair3

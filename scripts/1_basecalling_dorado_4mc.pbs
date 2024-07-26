@@ -1,0 +1,29 @@
+#PBS -r n
+#PBS -l mem=100GB,walltime=300:00:00,ncpus=16,ngpus=1
+#PBS -q gpu
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+set -e 
+
+module load samtools/1.17
+source ~/.proxy
+
+mkdir -p "${wk_dir}/output_4mc/${SampleID}"
+mkdir -p "${wk_dir}/output_4mc/${SampleID}/QC"
+
+pod5_files="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/data/${SampleID}/POD5/"
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/primary_files/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+dorado="/mnt/backedup/home/lijunX/local/dorado-0.7.1-linux-x64/bin/dorado"
+
+#define output
+bam_output="${wk_dir}/output_4mc/${SampleID}/${SampleID}_sup.bam"
+summary_output="${wk_dir}/output_4mc/${SampleID}/QC/${SampleID}_summary.tsv"
+
+$dorado basecaller sup,5mCG_5hmCG,6mA,4mC_5mC \
+$pod5_files \
+--recursive --reference $reference_fa > $bam_output
+
+$dorado summary $bam_output > $summary_output

@@ -1,0 +1,18 @@
+#PBS -r n
+#PBS -l mem=50GB,walltime=30:00:00,ncpus=1
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+module load samtools/1.17
+module load htslib/1.19.1
+
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/landingpad_hg38.fa"
+remapped_bam="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/OVCAR8_LP_A6_30_lp_mapped"
+
+samtools consensus -f fasta \
+--region chr15:99325611-99327611 \
+${remapped_bam}.bam -o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/upstream_flank.fa
+
+samtools consensus -f fasta \
+--region chr15:99327615-99329615 \
+${remapped_bam}.bam -o /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/downstream_flank.fa

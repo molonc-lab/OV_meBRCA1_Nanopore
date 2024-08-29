@@ -1,0 +1,17 @@
+#PBS -r n
+#PBS -l mem=100GB,walltime=10:00:00,ncpus=16
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+module load conda-envs/severus-1.0
+
+wk_dir="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore"
+mkdir -p ${wk_dir}/output/landing_pad_mapping/severus
+
+severus --target-bam ${wk_dir}/output/OVCAR8_LP_A6_30/whatshap/OVCAR8_LP_A6_30_phased_sorted.bam \
+--control-bam ${wk_dir}/output/OVCAR8/whatshap/OVCAR8_phased_sorted.bam \
+--out-dir ${wk_dir}/output/landing_pad_mapping/severus \
+-t 16 \
+--phasing-vcf ${wk_dir}/output/OVCAR8_LP_A6_30/clair3/phased_merge_output.vcf.gz \
+--vntr-bed ${wk_dir}/ref/reference/human_GRCh38_no_alt_analysis_set.trf.bed 
+

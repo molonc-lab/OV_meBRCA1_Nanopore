@@ -1,0 +1,28 @@
+#PBS -r n
+#PBS -l mem=100GB,walltime=8:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load longread/python39venv
+module load samtools/1.17
+
+mkdir -p ${wk_dir}/entropy
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+
+modkit="${HOME}/local/modkit_v0.3.1/modkit"
+
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+
+$modkit entropy --in-bam ${bam_mapped} \
+-o ${wk_dir}/entropy/${SampleID}_entropy.bed \
+--ref ${reference_fa} \
+--base C \
+--threads 12 \
+--log-filepath ${wk_dir}/entropy/${SampleID}_entropy.log

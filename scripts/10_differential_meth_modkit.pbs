@@ -9,38 +9,32 @@ module load samtools/1.17
 
 wk_dir="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output"
 
+mkdir -p ${wk_dir}/modkit_dmr
+
 reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
 
-OVCAR8="${wk_dir}/OVCAR8/Me/OVCAR8_pileup.bed.gz"
-OVCAR8_LP_A6_30="${wk_dir}/OVCAR8_LP_A6_30/Me/OVCAR8_LP_A6_30_pileup.bed.gz"
-UWB1="${wk_dir}/UWB1/Me/UWB1_pileup.bed.gz"
-UWB1_BRCA1="${wk_dir}/UWB1_BRCA1/Me/UWB1_BRCA1_pileup.bed.gz"
-WEHI_CS62="${wk_dir}/WEHI_CS62/Me/WEHI_CS62_pileup.bed.gz"
+OVCAR8="${wk_dir}/OVCAR8/Me/OVCAR8_pileup_m.bed.gz"
+OVCAR8_LP_A6_30="${wk_dir}/OVCAR8_LP_A6_30/Me/OVCAR8_LP_A6_30_pileup_m.bed.gz"
+UWB1="${wk_dir}/UWB1/Me/UWB1_pileup_m.bed.gz"
+UWB1_BRCA1="${wk_dir}/UWB1_BRCA1/Me/UWB1_BRCA1_pileup_m.bed.gz"
+#WEHI_CS62="${wk_dir}/WEHI_CS62/Me/WEHI_CS62_pileup_m.bed.gz"
 
-modkit="${HOME}/local/modkit_v0.2.6/modkit"
+modkit="${HOME}/local/modkit_v0.3.1/modkit"
 
-cpg_islands="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/cpg_islands_ucsc_cleaned.bed"
-
-$modkit dmr multi \
--s $OVCAR8 OVCAR8 \
--s $OVCAR8_LP_A6_30 OVCAR8_LP_A6_30 \
--s $UWB1 UWB1 \
--s $UWB1_BRCA1 UWB1_BRCA1 \
--s $WEHI_CS62 WEHI_CS62 \
--o ${wk_dir}/dmr_pb \
--r ${cpg_islands} \
+$modkit dmr pair -a $UWB1_BRCA1 \
+-b $UWB1 \
 --ref ${reference_fa} \
---base C \
 --threads 12 \
---log-filepath ${wk_dir}/dmr_pb/dmr.log
-
+--log-filepath ${wk_dir}/modkit_dmr/UWB1.log \
+--base C \
+-o ${wk_dir}/modkit_dmr/UWB1_dmr.bed \
+--segment ${wk_dir}/modkit_dmr/UWB1_segments.bed
 
 $modkit dmr pair -a $OVCAR8 \
--a $UWB1_BRCA1 \
 -b $OVCAR8_LP_A6_30 \
--b $UWB1 -b $WEHI_CS62 \
 --ref ${reference_fa} \
--o ${wk_dir}/dmr_pb/single_base_haplotype_dmr.bed \
---base C \
 --threads 12 \
---log-filepath ${wk_dir}/dmr_pb/dmr.log
+--log-filepath ${wk_dir}/modkit_dmr/OVCAR8.log \
+--base C \
+-o ${wk_dir}/modkit_dmr/OVCAR8_dmr.bed \
+--segment ${wk_dir}/modkit_dmr/OVCAR8_segments.bed

@@ -1,0 +1,48 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=1:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+module load htslib/1.19.1
+module load longread/python39venv
+module load samtools/1.17
+
+wk_dir="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output"
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+
+OVCAR8="${wk_dir}/OVCAR8/Me/OVCAR8_pileup.bed.gz"
+OVCAR8_LP_A6_30="${wk_dir}/OVCAR8_LP_A6_30/Me/OVCAR8_LP_A6_30_pileup.bed.gz"
+UWB1="${wk_dir}/UWB1/Me/UWB1_pileup.bed.gz"
+UWB1_BRCA1="${wk_dir}/UWB1_BRCA1/Me/UWB1_BRCA1_pileup.bed.gz"
+WEHI_CS62="${wk_dir}/WEHI_CS62/Me/WEHI_CS62_pileup.bed.gz"
+
+modkit="${HOME}/local/modkit_v0.2.6/modkit"
+
+cpg_islands="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/cpg_islands_ucsc_cleaned.bed"
+
+$modkit dmr multi \
+-s $OVCAR8 OVCAR8 \
+-s $OVCAR8_LP_A6_30 OVCAR8_LP_A6_30 \
+-s $UWB1 UWB1 \
+-s $UWB1_BRCA1 UWB1_BRCA1 \
+-s $WEHI_CS62 WEHI_CS62 \
+-o ${wk_dir}/dmr_pb \
+-r ${cpg_islands} \
+--ref ${reference_fa} \
+--base C \
+--threads 12 \
+--log-filepath ${wk_dir}/dmr_pb/dmr.log
+
+
+$modkit dmr pair -a $OVCAR8 \
+-a $UWB1_BRCA1 \
+-b $OVCAR8_LP_A6_30 \
+-b $UWB1 -b $WEHI_CS62 \
+--ref ${reference_fa} \
+-o ${wk_dir}/dmr_pb/single_base_haplotype_dmr.bed \
+--base C \
+--threads 12 \
+--log-filepath ${wk_dir}/dmr_pb/dmr.log
+
+$modkit dmr pair -a $OVCAR8 -b $OVCAR8_LP_A6_30 --ref ${reference_fa} \

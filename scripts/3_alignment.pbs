@@ -1,5 +1,5 @@
 #PBS -r n
-#PBS -l mem=36GB,walltime=30:00:00,ncpus=24
+#PBS -l mem=128GB,walltime=30:00:00,ncpus=24
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au
 #PBS -v SampleID
@@ -10,14 +10,17 @@ module load minimap2/2.26
 module load htslib/1.19.1
 
 
-reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
-
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
 if [ $SampleID == "UWB1_BRCA1" ]
 then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
 fi
 
-bam_repaired="${wk_dir}/output/${SampleID}/${SampleID}_trimmed_repaired.bam"
-bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped"
+if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
+then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+fi
+
+bam_repaired="${wk_dir}/output_4mc/${SampleID}/${SampleID}_trimmed_repaired.bam"
+bam_mapped="${wk_dir}/output_4mc/${SampleID}/${SampleID}_mapped"
 
 
 samtools fastq -T"*" $bam_repaired | \

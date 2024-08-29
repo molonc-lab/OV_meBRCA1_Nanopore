@@ -20,9 +20,6 @@ if [ $SampleID == "UWB1_BRCA1" ]
 then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
 fi
 
-
-samtools sort -@12 -O BAM --write-index -o ${phased_sorted}.bam##idx##${phased_sorted}.bai $phased_bam
-
 $modkit pileup ${phased_sorted}.bam ${phased_sorted}.bed --cpg --ref $reference_fa \
 --combine-strands --threads 12 --partition-tag HP --prefix haplotyped \
 --log-filepath ${phased_sorted}_pileup.log

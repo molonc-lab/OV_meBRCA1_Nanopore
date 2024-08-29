@@ -11,10 +11,10 @@ module load samtools/1.17
 
 cd $wk_dir
 
-bam_input="output/${SampleID}/${SampleID}_sup.bam"
-bam_input_sorted="output/${SampleID}/${SampleID}_sup_sorted.bam"
-bam_trimmed="output/${SampleID}/${SampleID}_trimmed_sorted.bam"
-bam_repaired="output/${SampleID}/${SampleID}_trimmed_repaired.bam"
+bam_input="output_4mc/${SampleID}/${SampleID}_sup.bam"
+bam_input_sorted="output_4mc/${SampleID}/${SampleID}_sup_sorted.bam"
+bam_trimmed="output_4mc/${SampleID}/${SampleID}_trimmed_sorted.bam"
+bam_repaired="output_4mc/${SampleID}/${SampleID}_trimmed_repaired.bam"
 
 samtools fastq -T"*" $bam_input |\
 /working/lab_nicw/jiaZ/local/chopper/chopper --headcrop 40 --tailcrop 20 --threads 12 |\
@@ -26,7 +26,7 @@ samtools sort -@12 -n $bam_input > $bam_input_sorted
 
 /working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit repair --donor-bam $bam_input_sorted \
 --acceptor-bam $bam_trimmed \
---log-filepath "${wk_dir}/output/${SampleID}/modkit_repair.log" --output-bam $bam_repaired
+--log-filepath "${wk_dir}/output_4mc/${SampleID}/modkit_repair.log" --output-bam $bam_repaired
 
 rm $bam_input_sorted
 rm $bam_trimmed

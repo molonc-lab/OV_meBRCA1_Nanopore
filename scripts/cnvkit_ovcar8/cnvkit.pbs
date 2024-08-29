@@ -1,0 +1,51 @@
+################################################################################
+################################################################################
+#PBS -N cnvkit
+#PBS -r n
+#PBS -l select=1:ncpus=16:mem=100GB
+#PBS -l walltime=48:00:00
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -W umask=0007
+##PBS -e /path/to/pbsstderr
+##PBS -o /path/to/pbsstdout
+################################################################################
+################################################################################
+
+#load modules
+module load miniconda3/current      
+source activate cnvkit-0.9.9
+
+wkdir="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/scripts/cnvkit_ovcar8"
+
+norm_bam_1="/mnt/backedup/home/jiaZ/working/bioprojects/nanopore_celllines_benchmark/1.dna_mixing_celllines/work/analysis/bam/R10/sup/COLO829_BL.bam"
+norm_bam_2="/mnt/backedup/home/jiaZ/working/bioprojects/nanopore_celllines_benchmark/1.dna_mixing_celllines/work/analysis/bam/R10/sup/HCC1937_BL.bam"
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/SAMTOOLS_1.2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+ovcar8="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped.bam"
+annotation_ref="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/refFlat.txt"
+
+#create dummy *.targetcoverage.cnn and *.antitargetcoverage.cnn
+#cnvkit.py batch $norm_bam_1 -n $norm_bam_2 -p 16 -m wgs -f $reference_fa --annotate $annotation_ref -d ${wkdir}
+
+#create dummy reference from the process
+#cnvkit.py reference -o ${wkdir}/FlatReference.cnn -f $reference_fa -t *.target.bed -a *.antitarget.bed
+
+#run tumour only
+cnvkit.py batch $ovcar8 -r ${wkdir}/FlatReference.cnn -p 16 -m wgs -d ${wkdir}
+
+
+#SNP genome 1000
+################
+#https://github.com/SciLifeLab/Sarek/blob/master/docs/ASCAT.md
+################
+#wget https://export.uppmax.uu.se/sllstore2017079/Sarek/1000G_phase3_20130502_SNP_maf0.3.loci
+#awk '{print "chr"$1":"$2"-"$2}' 1000G_phase3_20130502_SNP_maf0.3.loci > 1000G_phase3_20130502_SNP_maf0.3.bed
+##use UCSC liftOver
+#more hglft_genome_13030_d35e10.bed | awk 'BEGIN{FS="chr"} {print $2}' | awk 'BEGIN{FS="-"} {print $1}' | awk 'BEGIN{FS=":";OFS="\t"} {print $1,$2}' > 1000G_phase3_GRCh38_maf0.3.loci
+module load vcftools/0.1.16
+#vcftools --vcf OVCAR8.vcf --positions 1000G_phase3_GRCh38_maf0.3.loci --out OVCAR8_snp --recode --keep-INFO-all
+
+#call cn changes
+cnvkit.py call ${wkdir}/OVCAR8_mapped.cns --purity 1 --center median \
+--vcf "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/deepvariants/OVCAR8.vcf.gz" \
+-o ${wkdir}/OVCAR8_mapped.call.cns

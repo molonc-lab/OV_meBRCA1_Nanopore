@@ -1,0 +1,26 @@
+#PBS -r n
+#PBS -l mem=20GB,walltime=2:00:00,ncpus=1
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load samtools/1.9
+module load bcftools/1.6
+module load java/OpenJDK-21.0.1
+module load R/4.2.0
+
+
+bcftools view -f 'PASS' ${wk_dir}/output/${SampleID}/deepvariants/${SampleID}.vcf.gz > ${wk_dir}/output/${SampleID}/deepvariants/vep_variants_hg38.vcf
+
+java -jar /software/adamajava/adamajava-current/build/lib/qannotate.jar \
+--mode snpeff \
+-d /reference/software/snpEff/GRCh38.76 \
+-i ${wk_dir}/output/${SampleID}/deepvariants/vep_variants_hg38.vcf \
+-o ${wk_dir}/output/${SampleID}/deepvariants/${SampleID}_snpEff.vcf
+
+
+java -jar /software/adamajava/adamajava-current/build/lib/qannotate.jar \
+--mode vcf2maf \
+-i ${wk_dir}/output/${SampleID}/deepvariants/${SampleID}_snpEff.vcf \
+-o ${wk_dir}/output/${SampleID}/deepvariants/${SampleID}_snpEff.maf

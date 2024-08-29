@@ -1,24 +1,29 @@
 #PBS -r n
-#PBS -l mem=30GB,walltime=40:00:00,ncpus=4
+#PBS -l mem=100GB,walltime=40:00:00,ncpus=4
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au
 #PBS -v SampleID
 #PBS -v wk_dir
 
-mkdir -p ${wk_dir}/output/${SampleID}/wakhan_2
+mkdir -p ${wk_dir}/output/${SampleID}/wakhan
 haplotagged_bam=${wk_dir}/output/${SampleID}/whatshap/${SampleID}_phased_sorted.bam
-reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
 phased_vcf=${wk_dir}/output/${SampleID}/clair3/phased_merge_output.vcf.gz
+severus_sv_vcf=${wk_dir}/output/${SampleID}/severus/all_SVs/severus_all.vcf
 
-
-module load conda-envs/base
+module load conda-envs/Wakhan-20240717
 conda activate /working/lab_nicw/jiaZ/local/micromanba_envs/wakhan
-python  /working/lab_nicw/jiaZ/local/Wakhan/src/main.py --target-bam $haplotagged_bam \
+module load samtools/1.17
+module load
+
+python /working/lab_nicw/jiaZ/local/Wakhan_20240808/src/main.py --target-bam $haplotagged_bam \
 --threads 4 \
 --reference $reference_fa \
 --tumor-vcf $phased_vcf \
 --copynumbers-enable True \
 --unphased-reads-coverage-enable True \
+--phaseblock-flipping-enable True \
 --genome-name $SampleID \
---without-phasing True \
---out-dir-plots $wk_dir/output/${SampleID}/wakhan_2
+--breakpoints $severus_sv_vcf \
+--out-dir-plots ${wk_dir}/output/${SampleID}/wakhan
+

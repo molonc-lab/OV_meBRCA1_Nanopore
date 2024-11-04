@@ -1,0 +1,630 @@
+---
+title: "nanopore_meBRCA1"
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+#| include: false
+# library(signal)
+library("data.table")
+library("ComplexHeatmap")
+library("ggplot2")
+library("tidyverse")
+library("purrr")
+library("scales")
+library("ggfortify")
+library("ggrepel")
+library(vroom)
+library(matrixStats)
+library(factoextra)
+library(corrplot)
+library(ggpubr)
+library(scattermore)
+library(circlize)
+library(tidyfast)
+library(dplyr)
+library(patchwork)
+
+
+setDTthreads(threads = 12)
+
+
+```
+
+```{r}
+cell_line = list("OVCAR8", "OVCAR8_LP_A6_30", "UWB1", "UWB1_BRCA1", "WEHI_CS62")
+PDX = list("134011_1910_T4", "134062_9174_T4", "SFRC01585S1_2163_T3","SFRC01428S1_22235_T2", "134048_7794_T2", "SFRC01495S2_1537_T1",  "SOLACE2_0126S1_25285_T2", "134169_6606_T2" )
+sample_type_palette = c("Cell-line"="#b5e2fa", "Xenograft" = "#ffd6a5")
+hrd_palette= c("HRD" ="#CC79A7" , "HRR" = "#009E73")
+hom_me_list <- list("134011_1910_T4", "134062_9174_T4", "SFRC01585S1_2163_T3", "WEHI_CS62", "OVCAR8_LP_A6_30")
+het_me_list <- list("SFRC01428S1_22235_T2", "134048_7794_T2", "SFRC01495S2_1537_T1", "WEHI_CS62", "OVCAR8", "SOLACE2_0126S1_25285_T2", "134169_6606_T2")
+mut_list <- list("UWB1", "UWB1_BRCA1")
+sample_palette = c("HOM_me" = "#540b0e", "HET_me" = "#e09f3e", "MUT" = "#335c67")
+
+sample_palette2 = c("hom_meBRCA1" = "#f2c14e", "het_meBRCA1" = "#f78154", "mut_BRCA1" = "#4d9078", "func_BRCA1" = "#5fad56")
+
+methylation_palette = c("Me" = "red", "Un" = "blue")
+```
+
+#load data import data for use \## load QC data
+
+```{r}
+
+pdx11 <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/QC/*_summary.tsv") %>%
+  map_dfr(~ fread(.x, select = "mean_qscore_template") %>%
+            mutate(sample = gsub("_summary.tsv", "", basename(.x)))) 
+
+nanopore_len <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/QC/*_summary.tsv") %>%
+  map_dfr(~ fread(.x, select = "sequence_length_template") %>%
+            mutate(sample = gsub("_summary.tsv", "", basename(.x)))) 
+
+coverage <- Sys.glob("output/*/coverage/*mosdepth.summary.txt")%>%
+  map_dfr(~ fread(.x)%>%
+            mutate(sample = gsub("_unphased.mosdepth.summary.txt", "", basename(.x)))) %>%
+  mutate(chrom = factor(chrom, level = paste0("chr", seq(1,22)))) %>%
+  filter(!is.na(chrom))
+```
+
+## load 5mc data -CELL-LINE
+
+```{r}
+lr_cell_line <- paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",cell_line, "/Me/",cell_line, "_m_pileup_tab.bed")%>%
+  map_dfr(~fread(.x, select = c(1,2,3,4,5,11,12), col.names = c("chrom", "start", "end", "mod_type", "Nvalid_cov","fraction_mod", "Nmod"), showProgress = T)%>%
+             mutate(Sample = gsub("_m_pileup_tab.bed", "", basename(.x))))
+
+
+```
+
+## load 5mc data -PDX
+
+```{r}
+lr_pdx<- paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/Me_all/",PDX, "_pileup_5mc_all.bed.gz")%>%
+  map_dfr(~fread(.x, select = c(1,2,3,4,5,11,12), col.names = c("chrom", "start", "end", "mod_type", "Nvalid_cov","fraction_mod", "Nmod"), showProgress = T)%>%
+            filter(mod_type == "m") %>%
+             mutate(Sample = gsub("_pileup_5mc_all.bed.gz", "", basename(.x))))
+
+```
+
+## load 4mc data -all
+
+```{r}
+lr_pdx<- paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/Me_all/",c(cell_line, PDX), "_pileup_4mc_all.bed.gz")%>%
+  map_dfr(~fread(.x, select = c(1,2,3,4,5,11,12), col.names = c("chrom", "start", "end", "mod_type", "Nvalid_cov","fraction_mod", "Nmod"), showProgress = T)%>%
+            filter(mod_type == "21839") %>%
+             mutate(Sample = gsub("_pileup_4mc_all.bed", "", basename(.x))))
+
+```
+
+## load 5hmc data -CELL-LINE
+
+```{r}
+lr_cell_line_5hmc <- paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/Me_all/",cell_line, "_pileup_5mc_all.bed.gz")%>%
+  map_dfr(~fread(.x, select = c(1,2,3,4,5,11,12), col.names = c("chrom", "start", "end", "mod_type", "Nvalid_cov","fraction_mod", "Nmod"), showProgress = T)%>%
+             mutate(Sample = gsub("_pileup_5mc_all.bed.gz", "", basename(.x)))) %>%
+  filter(mod_type == "h")
+
+```
+
+# QC
+
+## cell-line QC
+
+```{r}
+library(ggridges)
+
+
+len_plot <- nanopore_len %>%
+  mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "Xenograft")) %>%
+  filter(sample %in% cell_line) %>%
+        axis.title.y = element_blank(),
+        strip.background = element_blank(),
+       legend.position = "none",
+       strip.text.y = element_blank())+
+  scale_x_continuous(trans = "log10")+
+  scale_fill_manual(values = sample_type_palette)+
+  xlab("Read Length (bp)")
+
+qscore <- pdx11 %>%
+  mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "Xenograft")) %>%
+  # filter(sample %in% cell_line) %>%
+  ggplot(aes(y = mean_qscore_template, sample, fill = sample_type))+
+  geom_boxplot()+
+  theme_bw()+
+  facet_wrap(~sample_type, scale = "free_x", strip.position = "bottom")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.background = element_blank(),
+       strip.text.x = element_blank(),
+       legend.position = "none")+
+  ylab("Mean Base Quality Score")+
+  scale_fill_manual(values = sample_type_palette)
+  
+
+coverage_plot <-coverage %>%
+  group_by(sample) %>%
+  summarise(coverage = round(sum(mean *bases / sum(bases)), 0)) %>%
+  ungroup()  %>%
+  mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "Xenograft")) %>%
+  filter(sample %in% cell_line) %>%
+  ggplot(aes(x = sample, y = coverage, fill = sample_type))+
+  geom_bar(stat = "identity", color = "black")+
+  facet_wrap(~sample_type, scale = "free_x", strip.position = "bottom")+
+  theme_bw()+
+  geom_text(aes(label=paste0(coverage, "x")), vjust=0)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+        strip.background = element_blank(),
+       strip.text.x = element_blank(),
+       axis.ticks.y = element_blank(),
+       legend.position = "none",
+       axis.text.y = element_blank())+
+  ylab("Averaged Depth")+
+  scale_fill_manual(values = sample_type_palette, "Sample")
+  
+
+merged_plot <- ggarrange(len_plot,ggarrange(coverage_plot+
+            theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+                  axis.title.x = element_blank()), qscore, nrow = 2, heights = c(0.3, 0.7), align= "v"), common.legend = T, legend = "bottom")
+ggsave(plot = merged_plot, filename = "plots/nanopore_cell_line_qc.png",  width = 210, height = 297/1.5, units = "mm")
+```
+
+## Methylation correlation
+
+```{r}
+# correlation to methylation array
+methylation_array <- fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/output/batch2_beta_post_filt.tsv") %>%
+  dplyr::select(CpG, OVCAR8_LP_A6_30 = OVCAR8.A6.meth_DMSO, WEHI_CS62 = `62_DMSO2`) %>%
+  left_join(fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/output/batch1_beta_post_filt.tsv") %>%
+              dplyr::select(CpG, OVCAR8= OVCAR8_DMSO))
+array_annotation <- fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/supporting/EPIC-8v2-0_A1.csv", header =T, skip ="IlmnID")
+
+methylation_array <- methylation_array %>%
+  left_join(array_annotation%>%
+              dplyr::select(CpG = IlmnID,CHR, MAPINFO )) %>%
+  pivot_longer(cols = c("OVCAR8", "OVCAR8_LP_A6_30", "WEHI_CS62"), names_to = "Sample", values_to = "beta" )
+
+lr_epiv2 <- methylation_array %>%
+  left_join(lr_cell_line %>%
+              filter(mod_type == "m") %>%
+              mutate(m_h = (Nother_mod+Nmod)/Nvalid_cov) %>%
+              dplyr::select(CHR = chrom, MAPINFO = end, fraction_mod,m_h, Sample))
+
+
+lr_epiv2 %>%
+  ggplot(aes(x = beta, y = m_h))+
+  geom_bin2d(bins = 60)+
+  stat_cor(label.y = 1.1) +
+  stat_regline_equation(label.y = 1.05)+scale_fill_distiller(palette = "Spectral", trans = "log2")+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  xlab("%5mC +%5hmC per CpG")+
+  ylab("EPIC V2 beta")+
+  facet_wrap(~Sample)
+ggsave("plots/array_lr_corr.pdf", units = "mm", width = 210*1.5, height = 297/3*1.5 )
+
+
+#inter-sample correlation
+
+library(GGally)
+ggcorr(lr_cell_line %>%
+              filter(mod_type == "m") %>%
+         mutate(CpG = paste(chrom, start, sep ="_")) %>%
+         dplyr::select(CpG, Sample, fraction_mod) %>%
+         pivot_wider(names_from = Sample, values_from = fraction_mod) %>%
+         column_to_rownames("CpG") %>%
+         drop_na(), label = TRUE, label_round = 2,limits = c(0, 1), midpoint = 0.5, legend.position = "right", hjust = 0.75, layout.exp = 1)
+
+ggsave("plots/lr_intersample_corr.pdf", units = "mm", width = 210*1.5, height = 297/3*1.5 )
+```
+
+# Global analysis
+
+##HRD vs HRP\
+
+### global methylation diff
+
+```{r}
+global_filtered <- lr_cell_line %>%
+  filter(mod_type == 'm', Nvalid_cov >= 10,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22))) %>%
+  mutate(site = paste(chrom, start, end , sep = "_")) %>%
+  dplyr::select(site, fraction_mod, Sample) %>%
+  dt_pivot_wider(names_from = Sample, values_from = fraction_mod) %>%
+  drop_na() %>%
+  dt_pivot_longer(cols = c(OVCAR8, OVCAR8_LP_A6_30, UWB1, UWB1_BRCA1, WEHI_CS62), values_to = "fraction_mod", names_to = "Sample") %>%
+  mutate(HR = if_else(Sample %in% c("OVCAR8", "UWB1_BRCA1"), "HRP", "HRD"))
+
+
+global_filtered$HR <- ordered(global_filtered$HR, levels = c("HRP", "HRD"))
+
+
+```
+
+```{r}
+global_filtered %>%
+  group_by(Sample)%>%
+  mutate(Sample = if_else(Sample == "OVCAR8_LP_A6_30", "OVCAR8_A6_meth", Sample),
+          Sample =  factor(Sample, levels = c("OVCAR8_A6_meth", "OVCAR8", "UWB1", "UWB1_BRCA1", "WEHI_CS62"))) %>%
+  ggplot(aes(x = Sample, y = fraction_mod, color = HR))+
+  geom_violin()+
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               color = "black",
+               width = 0.1)+
+  stat_compare_means(comparisons = list(c("OVCAR8_A6_meth","OVCAR8"), c("UWB1", "UWB1_BRCA1")),method = "wilcox")+
+  scale_color_manual(values = c("HRD" = "#196B24", "HRP"= "#E97132"))+
+  theme_bw()+
+  theme(legend.position = "bottom")
+ggsave("plots/cell_line_global_comparison.pdf", height =5, width = 7)
+```
+
+attempt to use lasso capture association between HRR and HRD samples validation in PDX models 1. use methylkit to get DMP (position) #HRR specific methylation DMP
+
+```{r}
+
+library(methylKit)
+# lr_cell_line  %>%
+#   filter(chrom %in% paste0("chr", seq(1,22))) %>%
+#   mutate(chrBase = paste(chrom, start, sep = "."),
+#          strand = ".",
+#          freqT = Nvalid_cov - Nmod) %>%
+#   dplyr::select(chrBase, chr = chrom,  base = start, strand, coverage = Nvalid_cov, freqC = Nmod, freqT, Sample) %>%
+#   group_by(Sample) %>%
+# group_walk(~ write_tsv(.x, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/",.y$Sample, "amp_style.txt")), .keep = T)
+# reload <- methRead(list("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/OVCAR8amp_style.txt",
+#                         "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/OVCAR8_LP_A6_30amp_style.txt",
+#                         "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/UWB1amp_style.txt" ,
+#                         "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/UWB1_BRCA1amp_style.txt",
+#                         "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/WEHI_CS62amp_style.txt"),
+#                    sample.id = list("OVCAR8", "OVCAR8_A6_meth", "UWB1", "UWB1_BRCA1", "WEHI_CS62"),
+#                    assembly = "hg38",
+#                    treatment = c(0, 1, 1, 0 , 1),
+#                    context="CpG")
+# 
+# 
+# filtered_reload <- filterByCoverage(reload, lo.count =5, hi.count = 100)
+# meth = unite(filtered_reload, destrand = F)
+# dmp_cell_line <- calculateDiffMeth(meth, mc.cores = 12)
+# 
+# saveRDS(dmp_cell_line, file = "cell_line_HRD_DMP.RDS")
+
+dmp_cell_line  <- readRDS("cell_line_HRD_DMP.RDS")
+
+
+hrd_dmp <- data.frame(getMethylDiff(dmp_cell_line, qvalue = 0.05, diff = 10))
+
+hrd_dmp %>%
+  summarise(increase = sum(meth.diff >0),
+            decrease = sum(meth.diff < 0))
+
+library("karyoploteR")
+
+changedCpGgrange <- makeGRangesFromDataFrame(hrd_dmp %>%
+                                               filter(chr %in% paste0("chr", seq(1,22))) %>%
+                                               mutate(meth.diff= meth.diff /100,
+                                                      diff_color = if_else(meth.diff <=0, "blue", "red" )) %>%
+    dplyr::select(CHR =chr, start ,end, meth.diff,diff_color) , keep.extra.columns = T, ignore.strand = T, start.field = "start", end.field = "end")
+pdf("plots/DMP_HRD_distribution.pdf", height = 6, width = 5)
+kp <- plotKaryotype(plot.type = 2, genome = "hg38", chromosomes = paste0("chr", seq(1,22)))
+kpPoints(kp,data = changedCpGgrange, y =changedCpGgrange@elementMetadata@listData$meth.diff,col = changedCpGgrange@elementMetadata@listData$diff_color ,  cex = 0.2)
+legend(x = "bottomright", fill = c("blue", "red"), legend = c("low in HRD", "high in HRD"))
+dev.off()
+```
+
+###validation in PDX
+
+```{r}
+lr_pdx  %>%
+  right_join(hrd_dmp %>%dplyr::select(chrom = chr, start)) %>%
+  mutate(chrBase = paste(chrom, start, sep = "."),
+         strand = ".",
+         freqT = Nvalid_cov - Nmod) %>%
+  dplyr::select(chrBase, chr = chrom,  base = start, strand, coverage = Nvalid_cov, freqC = Nmod, freqT, Sample) %>%
+  group_by(Sample) %>%
+group_walk(~ write_tsv(.x, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/",.y$Sample, "amp_style.txt")), .keep = T)
+
+
+
+
+reload <- methRead(list("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/134011_1910_T4amp_style.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/134062_9174_T4amp_style.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/SFRC01585S1_2163_T3amp_style.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/SFRC01428S1_22235_T2amp_style.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/134048_7794_T2amp_style.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/SFRC01495S2_1537_T1amp_style.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/SOLACE2_0126S1_25285_T2amp_style.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/134169_6606_T2amp_style.txt"),
+                   sample.id = PDX,
+                   assembly = "hg38",
+                   treatment = c(1,1,1,0,0,0,0,0),
+                   context="CpG")
+
+
+# filtered_reload <- filterByCoverage(reload, lo.count =10, hi.count = 100)
+meth = unite(reload, destrand = F, min.per.group = 2L)
+dmp_pdx <- calculateDiffMeth(meth, mc.cores = 12)
+
+
+hrd_dmp_pdx <-data.frame(getMethylDiff(dmp_pdx,qvalue = 0.05))
+
+
+hrd_dmp_pdx <- hrd_dmp_pdx %>%
+  left_join(hrd_dmp %>%
+              dplyr::select(chr, start, end, iso_meth.diff = meth.diff)) %>%
+  filter(iso_meth.diff * meth.diff >0)
+
+library("karyoploteR")
+
+changedCpGgrange <- makeGRangesFromDataFrame(hrd_dmp_pdx %>%
+                                               filter(chr %in% paste0("chr", seq(1,22))) %>%
+                                               mutate(meth.diff= meth.diff /100,
+                                                      diff_color = if_else(meth.diff <=0, "blue", "red" )) %>%
+    dplyr::select(CHR =chr, start ,end, meth.diff,diff_color) , keep.extra.columns = T, ignore.strand = T, start.field = "start", end.field = "end")
+pdf("plots/DMP_HRD_distribution_pdx.pdf", height = 6, width = 5)
+kp <- plotKaryotype(plot.type = 2, genome = "hg38", chromosomes = paste0("chr", seq(1,22)))
+kpPoints(kp,data = changedCpGgrange, y =changedCpGgrange@elementMetadata@listData$meth.diff,col = changedCpGgrange@elementMetadata@listData$diff_color ,  cex = 0.2)
+legend(x = "bottomright", fill = c("blue", "red"), legend = c("low in HRD", "high in HRD"))
+dev.off()
+```
+
+### HRR dmp validation in ICGC
+
+```{r}
+library(readxl)
+
+icgc_purity <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/processed/ICGC_OV_purity.csv")
+icgc_ov <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/processed/methylation/ICGC_OV_meth_norm_beta.csv", check.names = F) %>%
+  gather(-V1, key = "array_name", value = "beta")
+
+icgc_ov_pvalue <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/processed/methylation/ICGC_OV_beta_pvalue.csv")
+
+icgc_pd <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/raw/20220505_ICGC_OV_meth/IDAT/ICGC_OV_pd.csv") %>%
+  mutate(array_name = paste(Sample_Name, Sentrix_ID,Sentrix_Position, sep = "_")) %>%
+  left_join(icgc_ov) %>%
+  mutate(donorLabel = gsub("_", "-", substr(Sample.ID, 1, 8))) %>%
+  left_join(icgc_ov_pvalue %>%
+              dplyr::select(Sample_Name = V1, pvalue = V2)) %>%
+  group_by(donorLabel, Tissue_type, V1) %>%
+  filter(pvalue == min(pvalue)) %>%
+  ungroup() %>%
+  dplyr::select(donorLabel, Tissue_type, Sample.ID, probeID = V1, beta)  %>%
+  mutate(Tissue_type = gsub("(?<=.)([A-Z])", " \\1",
+                            gsub("^[0-9]+", "", Tissue_type), perl = TRUE))
+
+
+icgc_pd <- icgc_pd %>%
+  right_join(icgc_purity %>%
+               mutate(V1 = gsub("-", "_", V1) ) %>%
+               dplyr::select(Sample.ID = V1, purity = V2))
+
+sample_label <- read_excel("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/nature14410-Supplementary Table 13.xlsx",sheet = 2, skip = 2) %>%
+  dplyr::select(donorLabel = SampleID, subtype = `HRD/CCNE1/WT Group`)
+sample_mut <- rbind(read_excel("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/nature14410-Supplementary_Table_4.xlsx",sheet = 1, skip = 1) %>%
+  mutate(SampleID = substr( `Study ID`, 1, 8), type = "Germline") %>%
+  dplyr::select(donorLabel = SampleID, Response, Gene = Genea, type),
+  read_excel("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/nature14410-Supplementary_Table_4.xlsx",sheet = 2, skip = 1) %>%
+  mutate(SampleID = substr(`Study ID`,1, 8), type = "Somatic") %>%
+  dplyr::select(donorLabel = SampleID, Response, Gene = Genea, type))
+
+annotation <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/HM450.hg38.manifest.gencode.v36.tsv.gz")
+
+icgc_available <- icgc_pd %>%
+  left_join(annotation %>%
+              dplyr::select(chr_probe = CpG_chrm, start_probe = CpG_beg, probeID)) %>%
+  right_join(hrd_dmp %>%
+               dplyr::select(chr, end), by = join_by(chr_probe == chr, start_probe  ==end))%>%
+  left_join(sample_label) %>%
+  left_join(sample_mut)
+
+
+icgc_available %>%
+  left_join(sample_label) %>%
+  left_join(sample_mut %>%
+              filter(type == "Somatic")) %>%
+  filter(!is.na(probeID), !is.na(subtype),( Response == "Sensitive" & subtype =="HRD" & Tissue_type =="Primary Tumour")| (subtype == "WT")) %>%
+  filter(purity >= 0.7) %>%
+  ggplot(aes(y = beta, x = subtype, color = Response))+
+  geom_boxplot()+
+  facet_wrap(~probeID)+
+  stat_compare_means(label.y = 0,aes(label = after_stat(p.signif)))
+
+
+
+unique(icgc_available$probeID)
+```
+
+### statistic comparison per base
+
+```{r}
+
+blacklist <- fread("ref/hg38-blacklist.v2.bed") %>%
+  `colnames<-`(c("chrom", "annotation_start", "annotation_end", "type"))
+mere_region <- rbind(fread("ref/hg38_gap.tsv") %>%
+  filter(type == "Telomere") %>%
+  dplyr::select(chrom, annotation_start = chromStart, annotation_end = chromEnd, type) ,
+fread("ref/hg38_centromere.tsv") %>%
+  mutate(type = "Centromere") %>%
+  dplyr::select(chrom, annotation_start = chromStart, annotation_end = chromEnd, type) )
+
+
+promoter <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/EDPnew_20240409.bed")
+gene_body <- fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/supporting/MANE.GRCh38.v1.3.ensembl_genomic_transcript.gtf") %>%
+  dplyr::select(CHR =V1, chromStart = V4, chromEnd = V5)
+
+cgi <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/cpg_islands_ucsc_cleaned.bed")%>%
+               dplyr::select(chrom = V1, chromStart = V2, chromEnd = V3)
+cgi <- rbind(cgi%>% mutate(cgi = "island"),
+             cgi%>% mutate(chromStart =chromStart -2000, chromEnd =chromEnd -2000, cgi = "shore"),
+             cgi%>% mutate(chromStart =chromStart +2000, chromEnd =chromEnd +2000, cgi = "shore"),
+             cgi%>% mutate(chromStart =chromStart -4000, chromEnd =chromEnd -4000, cgi = "shelf"),
+             cgi%>% mutate(chromStart =chromStart +4000, chromEnd =chromEnd +4000, cgi = "shelf"))
+
+dmp_annot <-as(dmp_cell_line,"data.frame") %>%
+  left_join(hrd_dmp_pdx %>%
+              mutate(diff = "PDX_dmp") %>%
+              dplyr::select(chr, start, diff))%>%
+  mutate(diff = case_when(diff == "PDX_dmp" ~ "DMP(PDX)",
+                          qvalue < 0.05 &  abs(meth.diff) > 25 ~ "DMP(Cell-line only)",
+                          TRUE ~ "Non-DMP"),
+         diff = factor(diff, levels = c("DMP(PDX)", "DMP(Cell-line only)", "Non-DMP")),
+    end = end +1) %>%
+  left_join(rbind(blacklist, mere_region), by = join_by( chr == chrom, start >= annotation_start, end <= annotation_end )) %>%
+  mutate(type = if_else(is.na(type), "Others", type))
+
+# blacklist_chi <- dmp_annot %>%
+#   group_by(diff, type) %>%
+#   summarise(n=n()) %>%
+#   ungroup() %>%
+#   pivot_wider(names_from = type, values_from = n) %>%
+#   column_to_rownames("diff") %>%
+#   chisq.test()
+
+
+
+dmp_annot  <- dmp_annot %>%
+  left_join(promoter %>%
+              dplyr::select(chrom = `#chrom`, chromStart, chromEnd, name), by = join_by( chr == chrom, start>= chromStart, end <= chromEnd)) %>%
+  mutate(genomic_gene_context = if_else(!is.na(name), "Promoter", NA)) %>%
+  dplyr::select(-c(name, chromStart, chromEnd)) %>%
+    left_join(gene_body, by = join_by( chr== CHR, start>= chromStart,  end <= chromEnd)) %>%
+  mutate(genomic_gene_context = if_else(!is.na(chromStart) & is.na(genomic_gene_context), "Gene Body", genomic_gene_context)) %>%
+  dplyr::select(-c(chromStart, chromEnd))  %>%
+  mutate(genomic_gene_context = if_else(is.na(genomic_gene_context), "Intergenic", genomic_gene_context)) %>%
+  distinct()
+
+
+dmp_annot %>%
+  dplyr::select(chr, start, end, type =diff, genomic_gene_context) %>%
+   group_by(type, genomic_gene_context) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(type) %>%
+  mutate(prop = n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x = type, fill = genomic_gene_context, y = prop))+
+  geom_bar(stat = "identity", color = "black", linewidth = 0.2, position = "fill")+
+   geom_text(aes(label=n),position = position_stack(vjust = 0.5))+
+  theme_bw()+
+  scale_fill_manual(values = c("Promoter"= "#7d4f50", "Gene Body" = "#cc8b86", "Intergenic" ="#f9eae1" ), "Gene Context")+
+  scale_y_continuous(labels = scales::percent)+
+  theme(legend.position = "bottom")+
+  xlab("Differential Methylation HRD vs HRP")+
+  guides(fill=guide_legend(nrow=2,byrow=TRUE))
+  
+ggsave("plots/isogenic_CpGs_enrichment_bar.pdf", height =5, width = 4)
+
+#CGI
+dmp_annot  <- dmp_annot %>%
+  left_join( cgi , by = join_by( chr == chrom, start>= chromStart, end <= chromEnd)) %>%
+  mutate( cgi = if_else(!is.na(cgi),  cgi, "open sea")) %>%
+  dplyr::select(-c(chromStart, chromEnd)) %>%
+   mutate(cgi = factor(cgi, levels = c("island", "shore", "shelf", "open sea"))) %>%
+   group_by(chr, start, end) %>%
+  arrange(cgi) %>%
+  filter(row_number() ==1)%>%
+  ungroup()
+
+dmp_annot %>%
+  dplyr::select(chr, start, end, type =diff, cgi) %>%
+   group_by(type, cgi) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(type) %>%
+  mutate(prop = n/sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x = type, fill = cgi, y = prop))+
+  geom_bar(stat = "identity", color = "black", linewidth = 0.2, position = "fill")+
+   geom_text(aes(label=n),position = position_stack(vjust = 0.5))+
+  theme_bw()+
+  scale_y_continuous(labels = scales::percent)+
+  theme(legend.position = "bottom")+
+  xlab("Differential Methylation HRD vs HRP")+
+  scale_fill_manual(values = c("island" = "#C1A17A", "shore" = "#EED7B5", "shelf" = "#9AD3C2",
+                "open sea" = "#A3C7E6")
+)+
+  guides(fill=guide_legend(nrow=2,byrow=TRUE))
+ggsave("plots/isogenic_CpGs_cgi_bar.pdf", height =5, width = 4)
+
+# cgi_chi <- dmp_annot  %>%
+#   group_by(diff, cgi) %>%
+#   summarise(n=n() ) %>%
+#   ungroup() %>%
+#   pivot_wider(names_from = cgi, values_from = n) %>%
+#   column_to_rownames("diff") %>%
+#   chisq.test()
+# 
+# corrplot(cgi_chi$residuals, is.cor =F)
+
+```
+
+### overlapped gene
+
+```{r}
+mane_file <- fread("ref/MANE.GRCh38.v1.3.ensembl_genomic_clean.tsv", sep = "\t", header = F, fill=TRUE) 
+mane_gene_coord <- mane_file %>%
+  filter(V3 == "gene") %>%
+  mutate(gene_name = gsub("gene_name=", "", V12)) %>%
+  dplyr::select(chrom = V1, gene_start = V4, gene_end = V5, gene_name)
+
+hrd_dmp_pdx %>%
+  left_join(mane_gene_coord, by = join_by(chr == chrom, start >= gene_start, end<= gene_end)) %>%
+  mutate(diff_dir = if_else(meth.diff >0, "+", "-")) %>%
+  filter(!is.na(gene_name)) %>%
+  group_by(diff_dir, gene_name) %>%
+  summarise(n=n()) %>%
+  ungroup()%>%
+  arrange(-n)
+
+
+```
+
+## 5hmc hrd vs hrp
+
+```{r}
+
+library(methylKit)
+lr_cell_line_5hmc  %>%
+  filter(chrom %in% paste0("chr", seq(1,22))) %>%
+  mutate(chrBase = paste(chrom, start, sep = "."),
+         strand = ".",
+         freqT = Nvalid_cov - Nmod) %>%
+  dplyr::select(chrBase, chr = chrom,  base = start, strand, coverage = Nvalid_cov, freqC = Nmod, freqT, Sample) %>%
+  group_by(Sample) %>%
+group_walk(~ write_tsv(.x, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/",.y$Sample, "amp_style_5hmC.txt")), .keep = T)
+reload <- methRead(list("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/OVCAR8amp_style_5hmC.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/OVCAR8_LP_A6_30amp_style_5hmC.txt",
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/UWB1amp_style_5hmC.txt" ,
+                        "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/methylkit_loading/UWB1_BRCA1amp_style_5hmC.txt"),
+                   sample.id = list("OVCAR8", "OVCAR8_A6_meth", "UWB1", "UWB1_BRCA1"),
+                   assembly = "hg38",
+                   treatment = c(0, 1, 1, 0 ),
+                   context="CpG")
+
+
+filtered_reload <- filterByCoverage(reload, lo.count =5, hi.count = 100)
+meth = unite(filtered_reload, destrand = F)
+dmp_cell_line <- calculateDiffMeth(meth, mc.cores = 12)
+
+saveRDS(dmp_cell_line, file = "cell_line_HRD_DMP_5hmc.RDS")
+
+dmp_cell_line  <- readRDS("cell_line_HRD_DMP_5hmc.RDS")
+
+
+hrd_dmp <- data.frame(getMethylDiff(dmp_cell_line, qvalue = 0.05, diff = 25))
+
+hrd_dmp %>%
+  summarise(increase = sum(meth.diff >0),
+            decrease = sum(meth.diff < 0))
+
+library("karyoploteR")
+
+changedCpGgrange <- makeGRangesFromDataFrame(hrd_dmp %>%
+                                               filter(chr %in% paste0("chr", seq(1,22))) %>%
+                                               mutate(meth.diff= meth.diff /100,
+                                                      diff_color = if_else(meth.diff <=0, "blue", "red" )) %>%
+    dplyr::select(CHR =chr, start ,end, meth.diff,diff_color) , keep.extra.columns = T, ignore.strand = T, start.field = "start", end.field = "end")
+pdf("plots/DMP_HRD_distribution.pdf", height = 6, width = 5)
+kp <- plotKaryotype(plot.type = 2, genome = "hg38", chromosomes = paste0("chr", seq(1,22)))
+kpPoints(kp,data = changedCpGgrange, y =changedCpGgrange@elementMetadata@listData$meth.diff,col = changedCpGgrange@elementMetadata@listData$diff_color ,  cex = 0.2)
+legend(x = "bottomright", fill = c("blue", "red"), legend = c("low in HRD", "high in HRD"))
+dev.off()
+```

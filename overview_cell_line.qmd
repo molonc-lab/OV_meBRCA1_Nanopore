@@ -7,7 +7,7 @@ editor: visual
 ```{r}
 #| echo: false
 #| include: false
-library(signal)
+#library(signal)
 library("data.table")
 library("ComplexHeatmap")
 library("ggplot2")
@@ -2089,6 +2089,53 @@ explore %>%
   facet_wrap(~deletion_context+CpG_context, ncol = 2)+
   theme_bw()+
   ylim(c(-1,1))
+```
+
+# different modifications
+
+## global
+
+```{r}
+mod_4mC <- fread("output_4mc/134011_1910_T4/Me/134011_1910_T4_pileup.bed.gz", nThread = 4) %>%
+  `colnames<-`(c("chrom", "start", "end", "mod_type", "Nvalid_cov_2", "strand", "start_2", "end_2", "color_2", "Nvalid_cov", "fraction_mod", "Nmod", "Ncanonical", "Nother_mod", "Ndelete", "Nfail", "Ndiff", "Nnocall")) %>%
+  filter(Nvalid_cov >= 5)%>%
+  filter(chrom %in% paste0("chr", seq(1,22 )))
+
+mod_5mC <- fread("output/134011_1910_T4/Me/134011_1910_T4_pileup.bed.gz", nThread = 4) %>%
+  `colnames<-`(c("chrom", "start", "end", "mod_type", "Nvalid_cov_2", "strand", "start_2", "end_2", "color_2", "Nvalid_cov", "fraction_mod", "Nmod", "Ncanonical", "Nother_mod", "Ndelete", "Nfail", "Ndiff", "Nnocall")) %>%
+  filter(Nvalid_cov >= 5)%>%
+  filter(chrom %in% paste0("chr", seq(1,22 )))
+
+merged_mdo <- mod_5mC %>%
+  filter(mod_type == "m") %>%
+  dplyr::select(chrom, start, end, mod_type, Nvalid_cov_5mC = Nvalid_cov, Nmod_5mC =Nmod, Ncanonical_5mC=Ncanonical,
+                Nother_mod_5mC =Nother_mod, Ndelete_5mC = Ndelete, Nfail_5mC = Nfail, Ndiff_5mC = Ndiff, Nnocall_5mC = Nnocall) %>%
+  left_join(mod_4mC%>%
+              filter(mod_type == "21839") %>%
+              dplyr::select(chrom, start, end, fraction_mod_4mc = fraction_mod, Nvalid_cov_4mC = Nvalid_cov, Nmod_4mC =Nmod, Ncanonical_4mC=Ncanonical,
+                Nother_mod_4mC = Nother_mod, Ndelete_4mC = Ndelete, Nfail_4mC = Nfail, Ndiff_4mC = Ndiff, Nnocall_4mC = Nnocall)) %>%
+  filter(fraction_mod_4mc > 50) %>%
+  arrange(-fraction_mod_4mc)
+
+merged_mdo %>%
+  filter(Nother_mod_5mC/Nvalid_cov_5mC*100 > 50)
+  ggplot(aes(x = fraction_mod_4mc, y = Nother_mod_5mC/Nvalid_cov_5mC*100))+
+  geom_point()
+
+merged_mdo %>%
+  filter(start >=43125336-2000, start <= 43125457+2000, chrom == "chr17") 
+  mutate(diff = Nvalid_cov_4mC - Nvalid_cov_5mC) %>%
+  ggplot(aes(x = "diff", y = diff))+
+  geom_violin()
+  
+  
+  mod_6mA %>%
+  filter(start >=43125336-20000, chrom == "chr17") 
+  
+  
+  
+
+
 ```
 
 The `echo: false` option disables the printing of code (only output is displayed).

@@ -12,26 +12,25 @@ modkit="${HOME}/local/modkit_v0.3.1/modkit"
 module load python/3.9.13
 module load bedtools/2.31.1 
 
-reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
-if [ $SampleID == "UWB1_BRCA1" ]
-then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
-fi
-if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
-then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
-fi
-
 sample_dir="${wk_dir}/output/${SampleID}"
 
 # merge SV from severus and nanomonsv
-Rscript ${wk_dir}/scripts/meth_sv/merge_severus_nanomonsv.R ${wk_dir} ${SampleID}
+#Rscript ${wk_dir}/scripts/meth_sv/merge_severus_nanomonsv.R ${wk_dir} ${SampleID}
 
 # subset 
-samtools view -bh -L ${sample_dir}/${SampleID}_merged_sv.bed -@ 8 ${sample_dir}/${SampleID}_mapped_sc.bam > ${sample_dir}/${SampleID}_merged_sv.bam
+#samtools view -bh -L ${sample_dir}/${SampleID}_merged_sv.bed -@ 8 ${sample_dir}/${SampleID}_mapped_sc.bam > ${sample_dir}/${SampleID}_merged_sv.bam
 
 # extract support read ID from nanomonsv output
-python ${wk_dir}/scripts/meth_sv/extract_split_readid.py -b ${sample_dir}/${SampleID}_mapped_sc.bam \
--e ${sample_dir}/${SampleID}_merged_sv.bed \
--o ${sample_dir}/${SampleID}_merged_sv_readid.tsv
+#python ${wk_dir}/scripts/meth_sv/extract_split_readid.py -b ${sample_dir}/${SampleID}_mapped_sc.bam \
+#-e ${sample_dir}/${SampleID}_merged_sv.bed \
+#-o ${sample_dir}/${SampleID}_merged_sv_readid.tsv
 
 #extract methylation
-$modkit extract --non-primary --force ${sample_dir}/${SampleID}_merged_sv.bam ${sample_dir}/${SampleID}_merged_SV_modkit_extract.tsv
+#$modkit extract --non-primary --force ${sample_dir}/${SampleID}_merged_sv.bam ${sample_dir}/${SampleID}_merged_SV_modkit_extract.tsv
+
+# store read mapping subset by ref or alt
+#Rscript ${wk_dir}/scripts/meth_sv/get_read_mapping.R ${wk_dir} ${SampleID}
+
+
+# deletion
+Rscript ${wk_dir}/scripts/meth_sv/get_bnd_meth.R ${wk_dir} ${SampleID}

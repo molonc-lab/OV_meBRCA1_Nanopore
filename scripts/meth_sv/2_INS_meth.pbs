@@ -1,5 +1,5 @@
 #PBS -r n
-#PBS -l mem=24GB,walltime=1:00:00,ncpus=1
+#PBS -l mem=12GB,walltime=1:00:00,ncpus=1
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au
 #PBS -v SampleID

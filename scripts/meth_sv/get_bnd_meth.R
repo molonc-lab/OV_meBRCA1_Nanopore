@@ -7,8 +7,6 @@ if (length(args) < 2) {
 # Assign arguments to variables
 wk_dir <- args[1]
 SampleID <- args[2]
-wk_dir = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore"
-SampleID="OVCAR8_LP_A6_30"
 
 
 suppressMessages(suppressWarnings(library(data.table)))

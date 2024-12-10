@@ -7,8 +7,6 @@ if (length(args) < 2) {
 # Assign arguments to variables
 wk_dir <- args[1]
 SampleID <- args[2]
-wk_dir = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore"
-SampleID="OVCAR8_LP_A6_30"
 
 
 suppressMessages(suppressWarnings(library(data.table)))
@@ -18,6 +16,8 @@ suppressMessages(suppressWarnings(library(tidyverse)))
 sample_folder = paste0(wk_dir, "/output/", SampleID)
 
 sv_merged <- readRDS(paste0(sample_folder, "/", SampleID, "_sv_merged.RDS"))
+
+read_mapping <- readRDS(paste0(sample_folder, "/", SampleID, "_read_mapping.RDS"))
 
 sv_merged %>%
   filter(str_detect(ALT, "INS")) %>%

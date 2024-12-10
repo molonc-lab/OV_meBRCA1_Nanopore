@@ -16,6 +16,8 @@ sample_folder = paste0(wk_dir, "/output/", SampleID)
 
 sv_merged <- readRDS(paste0(sample_folder, "/", SampleID, "_sv_merged.RDS"))
 
+read_mapping <- readRDS(paste0(sample_folder, "/", SampleID, "_read_mapping.RDS"))
+
 BND <- sv_merged %>%
   filter(str_detect(ALT, "\\]")|str_detect(ALT, "\\[")) %>%
   arrange(ID) %>%
@@ -30,4 +32,4 @@ BND %>%
   filter(read_type == "alt") %>%
   pull(read_id) %>%
   unique(.)%>%
-  write_lines(paste0(sample_folder,"/","bnd_read_name_saf_tag.tsv")
+  write_lines(paste0(sample_folder,"/","bnd_read_name_saf_tag.tsv"))

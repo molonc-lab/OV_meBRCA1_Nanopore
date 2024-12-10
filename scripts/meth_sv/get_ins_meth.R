@@ -67,9 +67,6 @@ merged_INS_reads <- INS_reads %>%
   mutate(shift_position = case_when(ref_position != -1 & ref_position <= SV_start ~ ref_position,
                                     ref_position != -1 & ref_position > SV_start ~ ref_position+ SV_len,
                                     T ~ shift_position),
-         shift_position = if_else(ref_position == -1 & ref_strand == "-", shift_position +SV_len, shift_position  )) %>%
-  mutate(mod = case_when(mod_qual >= 0.6 ~ 1,
-                         mod_qual <= 0.4 ~ 0,
-                         T ~ NA)) 
+         shift_position = if_else(ref_position == -1 & ref_strand == "-", shift_position +SV_len, shift_position  ))
 
 saveRDS(merged_INS_reads, file = paste0(sample_folder, "/", SampleID, "_INS_meth.RDS"))

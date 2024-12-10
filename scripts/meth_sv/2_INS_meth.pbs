@@ -8,7 +8,6 @@
 module load htslib/1.19.1
 module load samtools/1.20
 module load R/4.3.1
-modkit="${HOME}/local/modkit_v0.3.1/modkit"
 
 sample_dir="${wk_dir}/output/${SampleID}"
 Rscript ${wk_dir}/scripts/meth_sv/get_ins_readid.R ${wk_dir} ${SampleID}

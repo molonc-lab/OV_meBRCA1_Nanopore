@@ -13,4 +13,4 @@ qsub -v wk_dir=${wk_dir},SampleID=${SampleID} -N 1_SVs_${SampleID} 1_SV_meth.pbs
 # BND and INS
 jobid=$(qstat -f | grep -w "1_SVs_${SampleID}" | grep -oP '(\d{8})$' | uniq)
 qsub -v wk_dir=${wk_dir},SampleID=${SampleID} -N 2_BND_${SampleID} -W depend=afterok:${jobid} 2_BND_meth.pbs
-qsub -v wk_dir=${wk_dir},SampleID=${SampleID} -N 2_BND_${SampleID} -W depend=afterok:${jobid} 2_INS_meth.pbs
+qsub -v wk_dir=${wk_dir},SampleID=${SampleID} -N 2_INS_${SampleID} -W depend=afterok:${jobid} 2_INS_meth.pbs

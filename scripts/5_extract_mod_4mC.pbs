@@ -1,0 +1,39 @@
+#PBS -r n
+#PBS -l mem=100GB,walltime=30:00:00,ncpus=24
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+#PBS -v type
+
+##type can only be 5mc or 4mc
+
+module load htslib/1.19.1
+module load longread/python39venv
+module load samtools/1.17
+modkit="${HOME}/local/modkit_v0.3.1/modkit"
+
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
+then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+fi
+
+
+bam_mapped="${wk_dir}/output_4mc/${SampleID}/${SampleID}_mapped.bam"
+if [ $type == "5mc" ]
+then bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+fi
+
+me_pileup="${wk_dir}/Me_all/${SampleID}_pileup"
+modkit_log="${wk_dir}/Me_all/${SampleID}_modkit"
+
+
+#pileup all mod
+$modkit pileup $bam_mapped ${me_pileup}_${type}_all.bed --ref $reference_fa --threads 24 --log-filepath ${modkit_log}_pileup.log \
+--filter-threshold C:0.7 --ignore a
+
+bgzip -k ${me_pileup}_${type}_all.bed
+tabix -p bed ${me_pileup}_${type}_all.bed.gz

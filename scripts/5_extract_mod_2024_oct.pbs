@@ -1,0 +1,56 @@
+#PBS -r n
+#PBS -l mem=100GB,walltime=30:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load longread/python39venv
+module load samtools/1.17
+modkit="${HOME}/local/modkit_v0.3.1/modkit"
+
+mkdir -p "${wk_dir}/output/${SampleID}/Me"
+
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1|OVCAR8_LP_H4_53)$ ]]
+then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+fi
+
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
+#bam_mapped="${wk_dir}/output_4mc/${SampleID}/${SampleID}_filtered_mapped.bam"
+me_pileup="${wk_dir}/output/${SampleID}/Me/${SampleID}_pileup"
+modkit_log="${wk_dir}/output/${SampleID}/Me/${SampleID}_modkit"
+me_extract="${wk_dir}/output/${SampleID}/Me/${SampleID}_extract_reads.tsv"
+me_summary="${wk_dir}/output/${SampleID}/Me/${SampleID}_modkit.summary"
+
+
+$modkit pileup $bam_mapped ${me_pileup}_m.bed --cpg --ref $reference_fa --combine-strands --ignore h --threads 12 --log-filepath ${modkit_log}_m_pileup.log
+bgzip -k ${me_pileup}_m.bed
+tabix -p bed ${me_pileup}_m.bed.gz
+sed -e 's/ /\t/g' $me_pileup_m.bed > ${wk_dir}/output/${SampleID}/Me/${SampleID}_m_pileup_tab.bed
+
+#$modkit pileup $bam_mapped ${me_pileup}.bed --cpg --combine-strands --ref $reference_fa --threads 12 --log-filepath ${modkit_log}_pileup.log
+#bgzip -k ${me_pileup}.bed
+#tabix -p bed ${me_pileup}.bed.gz
+#rm ${me_pileup}.bed
+
+
+$modkit pileup $bam_mapped ${me_pileup}_6mA.bed --threads 12 --log-filepath ${modkit_log}_pileup.log
+bgzip -k ${me_pileup}_6mA.bed
+tabix -p bed ${me_pileup}_6mA.bed.gz
+rm ${me_pileup}_6mA.bed
+
+
+#/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit extract -t 12 --log-filepath ${modkit_log}_extract.log $bam_mapped $me_extract
+
+
+#$modkit summary -t 12 $bam_mapped > $me_summary
+
+
+
+
+

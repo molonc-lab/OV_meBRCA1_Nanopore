@@ -1,0 +1,575 @@
+---
+title: "Mutational Signature analysis and HRD prediction"
+author: "Olga Kondrashova"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+
+```{r getPackageFunction, echo=FALSE, eval=TRUE, message=FALSE, warning=FALSE}
+# Load required packages
+library(tidyverse)
+library(magrittr)
+library(MutationalPatterns)
+library(deconstructSigs)
+library(scarHRD)
+library(YAPSA)
+library(here)
+library(data.table)
+```
+
+```{r setup, include=FALSE}
+# knitr global options
+knitr::opts_chunk$set( comment = NA, cache=TRUE, message = FALSE, warnings = FALSE, include = TRUE, fig.align = 'center', figcap.prefix = "Figure", figcap.sep = ":", figcap.prefix.highlight = "**", fig.path = "figures/")
+
+options(scipen = 999)
+```
+
+### Preparation
+
+Define functions for running mutational signatures & getting HRdetect scores. 
+
+```{r define_functions}
+run_deconstructsigs <- function(data,out_path, out_name, signatures, method = "default", plot=FALSE, cutoff=0.10) {
+  # Run deconstructSigs on all samples
+  for (i in 1:nrow(data)){
+    sample_id=row.names(data[i,])
+    sigs= whichSignatures(tumor.ref = data, 
+                          signatures.ref = signatures, 
+                          sample.id = sample_id,
+                          signature.cutoff = cutoff,
+                          contexts.needed = TRUE,
+                          tri.counts.method = method)
+    # Plot signatures if defined
+    if ( isTRUE(plot)){
+      out_file <- paste0(out_path,"figures/",sample_id,"_",method,"_",out_name,".pdf")
+      pdf(out_file)
+      plotSignatures(sigs)
+      dev.off()
+    }
+    # Combine sig assignments for samples to one dataframe
+    if (exists("sigs_final")) { 
+      sigs_final <- rbind(sigs_final,sigs$weights) 
+    } else { 
+      sigs_final <- sigs$weights
+    }
+  }
+  # Subset only detected signatures
+  sigs_detected <- sigs_final %>%
+    rownames_to_column(var="Sample")%>%
+    gather(Sig, Count, -Sample) %>%
+    group_by(Sig) %>%
+    filter(Count > 0) %>%
+    spread(Sig, Count, fill = 0)
+  
+  out_file <- paste0(out_path,method,"_",out_name,".tsv")
+  # Return signature assigment dataframe
+  write.table(sigs_detected, out_file ,quote = F, sep = "\t", row.names = F)
+  return(sigs_detected)
+}
+
+get_hrdetect_score <- function(data, std_data){
+  intercept <- std_data %>%
+    filter(feature == "intercept") %>%
+    pluck("weight")
+  
+  data <- data %>%
+    left_join(std_data) %>%
+    mutate(norm_value = log(value + 1),
+           norm_value = (norm_value - mean)/sd) %>%
+    mutate(weighted_value = norm_value*weight) %>%
+    group_by(Tumor_Sample) %>%
+    summarise(sum_values = sum(weighted_value)) %>%
+    mutate(hrdetect_score = 1/(1 +exp(-(intercept + sum_values)))) %>%
+    select(-sum_values)
+  
+  return(data)
+}
+
+rev_char <- function(char) {
+    sapply(char, function(a) {
+           paste(rev(substring(a,1:nchar(a),1:nchar(a))),collapse="")
+    })
+}
+
+get_match_length <- function(x, y) { 
+    min_length <- min(nchar(x), nchar(y))
+    if (min_length == 0) {
+        return(0) 
+    } else { 
+        return(sum(sapply(1:min_length, function(i) {
+            substr(x, 1, i) == substr(y, 1, i) 
+        })))
+    }
+}
+
+get_overlap_length <- function(seq1, seq2) {
+  overlap_matrix <- sapply(1:nchar(seq1), function(i) {
+    subseq1 <- substring(seq1, i, nchar(seq1))
+    sapply(1:nchar(seq2), function(j) {
+      subseq2 <- substring(seq2, j, nchar(seq2))
+      get_match_length(subseq1, subseq2)
+    })
+  })
+  
+  return(max(overlap_matrix))
+}
+
+
+get_match_length <- function(x, y) { 
+    min_length <- min(nchar(x), nchar(y))
+    if (min_length == 0) {
+        return(0) 
+    } else { 
+        return(sum(sapply(1:min_length, function(i) {
+            substr(x, 1, i) == substr(y, 1, i) 
+        })))
+    }
+}
+
+microhomology_summary <- function(indel_table) {
+    indel_table <- indel_table %>% filter(
+        ! is.na(deleted),
+        ! is.na(three_prime_flank),
+        ! is.na(five_prime_flank)
+    ) 
+
+    print('computing match statistics')
+
+    if (dim(indel_table)[1] > 0) {
+        three_prime <- apply(indel_table, 1, function(z) {
+            get_match_length(z['deleted'], z['three_prime_flank'])
+        })
+
+        five_prime <- apply(indel_table, 1, function(z) {
+            get_match_length(rev_char(z['deleted']), rev_char(z['five_prime_flank']))
+        })
+
+        max_match <- apply(cbind(three_prime, five_prime), 1, max)
+
+        indel_table$microhomology_length <- max_match
+        indel_table$is_microhomology <- max_match > 2
+    } else {
+        indel_table$microhomology_length <- numeric()
+        indel_table$is_microhomology <- logical()
+    }
+
+    return(indel_table)
+}
+
+
+```
+```{r define_supporting_info, echo=FALSE}
+
+sig_list_cosmicv2 <- c("Sig3", "Sig6",
+                       "Sig15","Sig21", "Sig26",
+                       "Sig20", "Sig14",
+                       "Sig10",  
+                       "Sig30", 
+                       "Sig4", "Sig5", 
+                       "Sig2","Sig13","Sig1",
+                       "Sig8",  "Sig12", 
+                       "Sig16", "Sig25",  "Sig28", 
+                       "Other")
+
+sig_colours_cosmicv2 <- c( "#943503","#8d69a3",
+                          "#7a5093", "#541e75","#420666",
+                          "#360678","#fa939e",
+                          "#f97886",
+                          "#118866",
+                          "#a0c41c","#809c16",
+                          "#85c1e9","#3498db","#009999",
+                          "#7c94ac", "#7c94ac",
+                          "#6a85a0","#577694","#577694",
+                          "#8d958f")
+names(sig_colours_cosmicv2) <- sig_list_cosmicv2
+```
+
+
+```{bash create_dirs}
+
+mkdir -p data/raw/ascat
+mkdir -p data/raw/indels
+mkdir -p data/raw/maf
+mkdir -p data/raw/microhom
+mkdir -p data/raw/qsv
+mkdir -p data/processed/scarHRD
+mkdir -p figures
+mkdir -p tables
+
+```
+
+
+
+### Load somatic report
+
+First need to provide the somatic report that will indicate which files to include in the analysis. This report should be placed in 'data/supporting/' directory.  
+
+
+```{r meta, message=FALSE}
+
+#Analysis path - by default is the path where Rmd script is located
+dir <- getwd()
+
+# Replace example file name with somatic report that will be used for this analysis
+somatic_report <- "data/supporting/ICGC_SomaticReport.txt"
+
+meta <- read_tsv(somatic_report, show_col_types = FALSE)
+
+# Writing environment variables so that bash can use them
+Sys.setenv(somatic_report = somatic_report)
+Sys.setenv(dir = dir)
+```
+
+
+### HRdetect prep
+
+#### microhomology
+adapted from Felicity's script 
+Computes HRDetect microhomology scores as described by Davies et al. (2017).
+https://www.ncbi.nlm.nih.gov/pubmed/28288110.
+
+```{r}
+library(VariantAnnotation)
+indels <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/clairs_to/indel.vcf.gz") %>%
+  map_dfr(~ fread(.x, skip ="#CHROM") %>%
+            mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+")))%>%
+   filter(!str_detect(FILTER, "LowQual"), !str_detect(FILTER, "NonSomatic"),
+          `#CHROM` %in% c(paste0("chr", c(seq(1,22), "X", "Y"))),
+          nchar(REF) > nchar(ALT)) %>%
+  dplyr::select(SampleID, `#CHROM`, POS, REF, ALT, FILTER, INFO)
+
+five_prime_flank <- getSeq(BSgenome.Hsapiens.UCSC.hg38, indels$`#CHROM`, indels$POS - 25, indels$POS)
+three_prime_flank <- getSeq(BSgenome.Hsapiens.UCSC.hg38, indels$`#CHROM`, indels$POS + 1, indels$POS + 26)
+deleted <- as.character(sapply(indels$REF, function(z) {substring(z, 2, nchar(z))}))
+
+indel_flanked <- cbind(indels, tibble(deleted = as.character(deleted),
+                                five_prime_flank = as.character(five_prime_flank), 
+                                three_prime_flank = as.character(three_prime_flank)))%>% 
+  microhomology_summary()
+
+microhomology <- indel_flanked %>%
+  group_by(SampleID) %>%
+    summarise(
+        deletion_microhomology_count = sum(is_microhomology),
+        deletion_count = n()
+    ) %>%
+    mutate(deletion_microhomology_proportion = if_else(deletion_count == 0, 0, deletion_microhomology_count / deletion_count))
+
+
+```
+
+#### Mutational signature analysis
+
+Define chromosomal order.  
+
+```{r chrom_order}
+#Chromosome order
+chr_levels=c("1","2","3","4","5","6","7","8","9","10","11",
+             "12","13","14","15","16","17","18","19","20","21",
+             "22","X")
+```
+
+Load MAF files with somatic variants.  
+  
+```{bash link_mafs}
+
+#cat $somatic_report | awk -v dir=$dir 'BEGIN {FS="\t"; OFS=""};  NR != 1 {print "ln -sf ",$61,"/*.shc.maf.gz #"dir"/data/raw/maf/"}' > scripts/copy_maf.txt
+
+#sh scripts/copy_maf.txt
+
+ln -s /working/genomeinfo/share/analysis/AOCS_-_ICGC_ovarian_cancer_project/MAFs/*.shc.maf.gz data/raw/maf/
+```
+
+Run deconstructSigs analysis - mutational signature assignment.  
+
+```{r snv_sigs, message=FALSE}
+library(BSgenome.Hsapiens.UCSC.hg38)
+
+cosmic_t <- read_delim("../ref/signatures_probabilities.txt",
+                      delim = "\t")  %>%
+  select(1:33,-`Substitution Type`,-Trinucleotide) %>%
+  arrange(match(`Somatic Mutation Type`,colnames(sigs_input))) %>%
+  column_to_rownames(var = "Somatic Mutation Type") %>%
+  as.matrix()
+ 
+cosmic_sigs <- as.data.frame(t(cosmic_t)) %>%
+  rownames_to_column(var = "Signature") %>%
+  mutate(Signature = str_replace(Signature,"Signature ","Sig")) %>%
+  column_to_rownames(var = "Signature")
+
+
+snv <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/clairs_to/snv.vcf.gz") %>%
+  map_dfr(~fread(.x, skip = "#CHROM") %>%
+            filter(!str_detect(FILTER,"NonSomatic|LowQual")) %>%
+            mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+")))%>%
+  select(SampleID, chr = `#CHROM`, POS, REF, ALT) 
+
+sigs_input <- snv %>%
+  group_by(SampleID) %>%
+  group_map( ~ mut.to.sigs.input(mut.ref = data.frame(.x),
+                                sample.id = "SampleID",
+                                chr = "chr",
+                                pos = "POS",
+                                ref = "REF",
+                                alt = "ALT" , bsg = BSgenome.Hsapiens.UCSC.hg38), .keep=T)
+
+
+
+sig_cosmic_default<-lapply(sigs_input, function(x) {run_deconstructsigs(data = x, 
+                                          out_path = "../output/scarHRD/",
+                                          out_name = paste(rownames(x),"cosmicv2_sig", sep ="_"),
+                                          signatures = cosmic_sigs,
+                                          method = "default", 
+                                          plot = F,
+                                          cutoff=0.10)})
+
+
+cosmic2_sig <- bind_rows(sig_cosmic_default) %>%
+  dplyr::rename(SampleID=Sample) %>%
+  left_join(snv %>%
+              group_by(SampleID) %>%
+              summarise(snv_count = n()))
+
+cosmic2_sig %>%
+  pivot_longer(cols = starts_with("Sig"), names_to = "Signature", values_to = "frequency") %>%
+  drop_na() %>%
+  mutate(Signature = factor(Signature, levels = sig_list_cosmicv2)) %>%
+  ggplot(aes(x = SampleID, y = frequency, fill = Signature))+
+  geom_bar(stat = "identity")+
+  scale_fill_manual(values = sig_colours_cosmicv2)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90))+
+  scale_y_continuous(limits = c(0,1), labels = scales::percent)
+
+
+sig_cosmic_default <- fread("../output/scarHRD/default_cosmicv2_sig.tsv")
+
+snv_hrdetect_sigs <- sig_cosmic_default %>%
+  dplyr::rename(Tumor_Sample=Sample) %>%
+  left_join(snv_count) %>%
+  mutate_at(vars(starts_with("Sig")),list(~.*n)) %>%
+  select(Tumor_Sample, Sig3, Sig8)
+
+```
+
+#### Rearrangement signature analysis
+
+
+First step - copy qSV outputs to preprocess.  
+  
+```{bash copy_qsv}
+
+#cat $somatic_report | \
+#awk -v dir=$dir 'BEGIN {FS="\t"; OFS=""};  NR != 1 {print "cp #",$73,"/*.somatic.ascat.mere.type.annotated.HighConfidence.dcc "dir"/data/raw/qsv/"}' > scripts/copy_qsv.txt
+
+#sh scripts/copy_qsv.txt
+
+
+ln -s /working/genomeinfo/share/analysis/AOCS_-_ICGC_ovarian_cancer_project/qsv/highconfidence/* data/raw/qsv/
+
+```
+
+
+Pre-process qSV outputs for SV signature analysis (script written by Felicity Newell).  
+  
+
+```{bash qsv_annot_list}
+
+cat $somatic_report | awk -v dir=$dir 'BEGIN {FS="\t"; OFS=""};  NR != 1 {print  dir"/data/raw/qsv/", $3, ".", $71, ".somatic.ascat.mere.type.annotated.HighConfidence.dcc\t",$9,"_",$16}' | sed 's/analysis://'| sort | uniq > data/supporting/qsv_annot_list.tsv
+
+```
+```{r}
+
+qsv_annot_list <- read_tsv("data/supporting/qsv_annot_list.tsv", col_names = F)
+rm_list <- c()
+for (i in qsv_annot_list$X1){
+  if(!file.exists(i)){
+    rm_list <- c(rm_list, i)
+  }
+}
+
+qsv_annot_list <- qsv_annot_list %>%
+  filter(!X1 %in% rm_list)
+
+write.table(qsv_annot_list, "data/supporting/qsv_annot_list.tsv", append = F, quote = F, col.names = F, row.names = F, sep = "\t")
+```
+```{bash}
+qsub -v DIR=$dir scripts/run_sv_signature_counts.pbs
+
+
+#monitoring for temp file that indicates that the qsub job is done
+while [ ! -f ./data/supporting/sv_signature_count_job_done.txt ]; do sleep 10; done
+
+# remove temp file for next time
+rm ./data/supporting/sv_signature_count_job_done.txt
+
+
+
+```
+
+  
+Run YAPSA to assign RS (SV) signatures. Starting point matlab input file created by Felicity.  
+   
+```{r SV_sig_assignment}
+
+sv_counts <- read_tsv("data/processed/sv_signature_matrix.tsv",show_col_types = FALSE)
+
+
+sv_total_counts <- sv_counts %>%
+  select(-Type,-SubType) %>%
+  gather(key = "patient_testSampleSubmittedWithID", value = "N") %>%
+  group_by(patient_testSampleSubmittedWithID) %>%
+  summarise(Total_count = sum(N))
+
+
+nikzainal_SV_sigs <- read_tsv("data/supporting/nz_sv_sigs.txt",show_col_types = FALSE) %>%
+  arrange(factor(subtypes, levels = sv_counts$SubType)) %>%
+  column_to_rownames("subtypes")
+
+sv_counts %<>%
+   select(-Type) %>%
+  column_to_rownames("SubType")
+
+sv_sigs_raw <- LCD(
+  in_mutation_catalogue_df = sv_counts,
+  in_signatures_df = nikzainal_SV_sigs)
+
+sv_sigs_assigned <- sv_sigs_raw %>%
+  rownames_to_column("Sig") %>%
+  gather(key= patient_testSampleSubmittedWithID, value = count_raw, - Sig) %>%
+  left_join(sv_total_counts)  %>%
+  group_by(patient_testSampleSubmittedWithID) %>%
+  mutate(Count = count_raw/sum(count_raw)*Total_count) %>%
+  mutate(Perc = Count/Total_count*100) %>%
+  mutate(Count = if_else(Perc > 10, round(Count), 0)) %>%
+  mutate(Perc = if_else(Perc > 10, Perc, 0))  %>%
+  #Need to change next time - accidentally used controlSampleSubmittedWithID instead of test for SVs!
+  left_join(meta %>% 
+              select(patientSubmittedWithID,testSampleSubmittedWithID,patientLabel, testSampleLabel) %>%
+              mutate(patient_testSampleSubmittedWithID = paste0(patientSubmittedWithID,"_",testSampleSubmittedWithID))) %>%
+  mutate(Tumor_Sample = paste(patientLabel, testSampleLabel, sep ="_")) %>%
+  ungroup() %>%
+  select(-Total_count, -count_raw, -testSampleSubmittedWithID,-patientLabel,-testSampleLabel,-patient_testSampleSubmittedWithID)
+
+
+```
+
+
+Run scarHRD to get HRD scores from ascat CN:
+
+```{r scarHRD, message = FALSE}
+CNV <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/wakhan/*/bed_output/*_copynumbers_segments_HP_1.bed") %>%
+  map_dfr(~fread(.x) %>%
+            dplyr::select(Chromosome = `#chr`, Start_position = start, End_position =end, A_cn = copynumber_state) %>%
+            mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+"),
+                   ploidy = as.numeric(str_extract(.x, "(?<=/wakhan/)[0-9]+\\.[0-9]+"))))%>%
+  left_join(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/wakhan/*/bed_output/*_copynumbers_segments_HP_2.bed") %>%
+  map_dfr(~fread(.x) %>%
+            dplyr::select(Chromosome = `#chr`, Start_position = start, End_position =end, B_cn = copynumber_state) %>%
+            mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+"),
+                   ploidy = as.numeric(str_extract(.x, "(?<=/wakhan/)[0-9]+\\.[0-9]+")))))%>%
+  mutate(total_cn = A_cn + B_cn) %>%
+  group_by(SampleID, Chromosome, grp = cumsum(lag(A_cn, default = first(A_cn)) != A_cn | 
+                                    lag(B_cn, default = first(B_cn)) != B_cn | 
+                                    lag(total_cn, default = first(total_cn)) != total_cn)) %>%
+  summarise(
+    Start_position = first(Start_position),
+    End_position = last(End_position),
+    A_cn = first(A_cn),
+    B_cn = first(B_cn),
+    total_cn = first(total_cn),
+    ploidy = first(ploidy),
+    .groups = "drop"
+  ) %>%
+  select(-grp)%>%
+  ungroup()
+
+CNV %>%
+  group_by(SampleID) %>%
+  group_walk(~ {
+    write_tsv(.x, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/scarHRD/",.y$SampleID, ".scarHRD.input.txt"))
+    scar_score(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/scarHRD/",.y$SampleID, ".scarHRD.input.txt"),
+               reference = "grch38" ,seqz = FALSE, outputdir = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/scarHRD/")
+    }, keep = TRUE)
+
+scarHRD_summary <- list.files(path="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/scarHRD",
+                            pattern = "_HRDresults.txt$",
+                            full.names = T,
+                            recursive = F) %>%
+  map_dfr(~fread(.,col.names = c("SampleID", "LOH", "TAI", "LST", "HRD_Score")))
+```
+
+
+### HRdetect predictions
+
+First, clean up all the inputs for HRdetect input.  
+
+```{r clean_up}
+
+hrdetect_input <- snv_hrdetect_sigs %>%
+  full_join(scarHRD_summary %>% select(Tumor_Sample, `HRD-sum`) %>% 
+              distinct()) %>%
+  full_join(microhom %>% select(Tumor_Sample, deletion_microhomology_proportion)%>%
+              distinct()) %>%
+  inner_join(sv_sigs_assigned %>%
+              select(Tumor_Sample, Count, Sig) %>%
+              mutate(Sig = str_replace(Sig, "Rearrangement Signature ","rs")) %>%
+               distinct() %>%
+              spread(key = Sig, value = Count) %>%
+              select(Tumor_Sample, rs3,rs5)) %>%
+  select(Tumor_Sample,Sig3,Sig8,
+         rs3,rs5,
+         `HRD-sum`,deletion_microhomology_proportion) %>%
+  drop_na() %>%
+  gather(key = feature, value = value, 
+         -Tumor_Sample) %>%
+  mutate(feature = case_when(feature == "Sig3" ~ "sig3",
+                             feature == "Sig8" ~ "sig8",
+                             feature == "HRD-sum" ~ "hrd",
+                             feature == "deletion_microhomology_proportion" ~ "mhom",
+                             TRUE ~ feature)) %>%
+  distinct()
+
+```
+
+```{r hrdetect_manual}
+
+hrd_adj_val <- read_tsv("data/supporting/hrdetect_adjustment_values.tsv", show_col_types = FALSE)
+
+
+hrdetect_output <- get_hrdetect_score(hrdetect_input,hrd_adj_val)
+
+```
+
+```{r summary_output}
+hrdetect_output %>%
+  left_join(scarHRD_summary %>% select(Tumor_Sample, `HRD-sum`)) %>%
+  write_tsv("tables/hrdetect.tsv")
+
+sig_cosmic_default %>%
+  dplyr::rename(Tumor_Sample=Sample) %>%
+  left_join(snv_count) %>%
+  gather(key = Sig, value = Perc, -n, -Tumor_Sample) %>%
+  mutate(Count =round(Perc*n)) %>%
+  mutate(Perc = Perc*100) %>%
+  select(-n) %>%
+  filter(Count != 0) %>%
+  arrange(Tumor_Sample) %>%
+  filter(Tumor_Sample %in% hrdetect_output$Tumor_Sample) %>%
+  write_tsv("tables/snv_sigs.tsv")
+
+sv_sigs_assigned %>%
+  arrange(Tumor_Sample) %>%
+  filter(Perc > 0 ) %>%
+  write_tsv("tables/sv_sigs.tsv")  
+  
+```
+
+### R Session
+
+```{r session_info}
+
+devtools::session_info()
+
+```

@@ -1,0 +1,17 @@
+#PBS -N Severus
+#PBS -r n
+#PBS -l select=1:ncpus=5:mem=200GB,walltime=20:00:00
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load conda-envs/severus-1.0
+
+mkdir -p ${wk_dir}/output/${SampleID}/severus
+
+severus --target-bam ${wk_dir}/output/${SampleID}/whatshap/${SampleID}_phased_sorted.bam \
+--out-dir ${wk_dir}/output/${SampleID}/severus \
+-t 5 \
+--phasing-vcf ${wk_dir}/output/${SampleID}/clair3/phased_merge_output.vcf.gz \
+--vntr-bed ${wk_dir}/ref/reference/human_GRCh38_no_alt_analysis_set.trf.bed 

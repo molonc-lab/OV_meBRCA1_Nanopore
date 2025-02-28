@@ -1,0 +1,32 @@
+#PBS -r n
+#PBS -l mem=60GB,walltime=30:00:00,ncpus=12
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load htslib/1.19.1
+module load samtools/1.20
+module load bedtools/2.31.1 
+modkit="${HOME}/local/modkit_v0.3.1/modkit"
+
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
+then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+fi
+
+sample_dir="${wk_dir}/output/${SampleID}"
+
+samtools view -bh -L ${sample_dir}/${SampleID}_merged_sv.bed -@ 8 ${sample_dir}/${SampleID}_mapped_sc.bam > ${sample_dir}/${SampleID}_merged_sv.bam
+
+samtools view -bh -N ${sample_dir}/bnd_read_name.tsv ${sample_dir}/${SampleID}_merged_sv.bam > ${sample_dir}/${SampleID}_merged_sv_bnd_alt.bam
+
+$modkit extract --non-primary --force ${sample_dir}/${SampleID}_merged_sv.bam ${sample_dir}/${SampleID}_merged_SV_modkit_extract.tsv
+
+
+#get alt seq alignment that is not fully mapped
+samtools view -N bnd_read_name_saf_tag.tsv OVCAR8_merged_sv.bam|cut -f 1,21 > bnd_read_name_saf_map.tsv
+samtools view -N bnd_read_name_saz_tag.tsv OVCAR8_merged_sv.bam|cut -f 1,2,3,4,6 > bnd_read_name_primary_map.tsv 

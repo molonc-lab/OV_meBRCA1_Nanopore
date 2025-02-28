@@ -1,0 +1,30 @@
+#!/bin/bash
+#######################
+#PBS -N sv_signature_count
+#PBS -l ncpus=1,mem=2gb,walltime=01:00:00
+#PBS -j oe
+#PBS -m ae
+#######################
+
+set -e
+
+module load R/3.4.1
+module load bedtools
+
+cd $DIR
+
+INPUT_DIR="./data"
+SCRIPT_DIR="./scripts"
+
+#Path for sampleFile:
+#Format: 2 columns with no header
+#Column1: path to qSV file
+#Column2: sample or donorID - Note ID MUST BE UNIQUE FOR EACH SAMPLE - example below
+#sampleFile=/mnt/lustre/working/genomeinfo/share/feliciN/software/sv_signature/qsv_annot_list_081221.tsv
+
+#Path/filename for output file - example below
+#outputFile=/mnt/lustre/working/genomeinfo/share/feliciN/software/sv_signature/output.tsv
+
+Rscript --vanilla ${SCRIPT_DIR}/sv_signature_counts.R ${DIR}/data/supporting/qsv_annot_list.tsv ${DIR}/data/processed/sv_signature_matrix.tsv
+ 
+touch ./data/supporting/sv_signature_count_job_done.txt

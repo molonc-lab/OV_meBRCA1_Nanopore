@@ -1,5 +1,5 @@
 #PBS -r n
-#PBS -l mem=24GB,walltime=30:00:00,ncpus=20
+#PBS -l mem=30GB,walltime=30:00:00,ncpus=4
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au
 #PBS -v SampleID
@@ -12,21 +12,26 @@ module load racon/1.3.2
 module load longread/python39venv
 module load samtools/1.17
 
-#bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
-bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_filtered_mapped.bam"
-
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
 reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
-if [ $SampleID == "UWB1_BRCA1" ]
-then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
-fi
+
+#reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+#if [ $SampleID == "UWB1_BRCA1" ]
+#then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+#fi
+
+#if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
+#then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+#fi
 
 
 mkdir -p ${wk_dir}/output/${SampleID}/SV
 
-nanomonsv parse $bam_mapped ${wk_dir}/output/${SampleID}/SV/${SampleID}
+#nanomonsv parse $bam_mapped ${wk_dir}/output/${SampleID}/SV/${SampleID}
 
 nanomonsv get ${wk_dir}/output/${SampleID}/SV/${SampleID} $bam_mapped \
 $reference_fa \
---use_racon --min_indel_size 10 \
+#--use_racon \
+--min_indel_size 10 \
 --control_panel_prefix /working/lab_nicw/jiaZ/data/nanomonsv/hprc_year1_data_freeze_nanopore_minimap2_2_24_merge_control/hprc_year1_data_freeze_nanopore_minimap2_2_24_merge_control \
---processes 20
+--processes 4

@@ -36,4 +36,4 @@ DEL_reads <- DEL %>%
   left_join(modkit_extract) 
 
 
-saveRDS(merged_INS_reads, file = paste0(sample_folder, "/", SampleID, "_DEL_meth.RDS"))
+saveRDS(DEL_reads, file = paste0(sample_folder, "/", SampleID, "_DEL_meth.RDS"))

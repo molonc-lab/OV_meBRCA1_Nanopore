@@ -18,17 +18,16 @@ if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
 then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
 fi
 
-bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
-me_pileup="${wk_dir}/output/${SampleID}/Me/${SampleID}_pileup_island"
-modkit_log="${wk_dir}/output/${SampleID}/Me/${SampleID}_modkit_island"
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
+me_pileup="${wk_dir}/output/Me_all/${SampleID}_pileup_islpro"
+modkit_log="${wk_dir}/output/Me_all/${SampleID}_modkit_islpro"
 
 
 $modkit pileup $bam_mapped ${me_pileup}.bed --cpg --ref $reference_fa \
---combine-strands --threads 12 \
---include-bed "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/cpg_island_ext_ucsc_cleaned.bed" \
+--combine-strands --threads 12 --ignore h \
+--include-bed "${wk_dir}/ref/island_promoter_merged.bed" \
 --log-filepath ${modkit_log}_pileup.log
 
-sed -e 's/ /\t/g' $me_pileup.bed > ${me_pileup}_tab.bed
 bgzip -k ${me_pileup}.bed
 tabix -p bed ${me_pileup}.bed.gz
 rm ${me_pileup}.bed

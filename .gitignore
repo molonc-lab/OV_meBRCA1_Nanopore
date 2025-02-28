@@ -65,14 +65,16 @@ plots/*
 *.html
 *.summary
 *.tab
-output/*
+output*/*
 data/*
+ref/*
 *.rds
 *.RData
 *.e*
 *.o*
-scripts/workflow/*
-ref/*
+igv_screenshot/*
+*rmarkdown
+*output_err/*
 
 #supporting files
 *.chain

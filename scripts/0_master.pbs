@@ -27,7 +27,7 @@ qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N extract_mod_${SampleID} -W depend=a
 
 # variants
 qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N clair3_${SampleID} -W depend=afterok:${alignment_jobid} 6a_clair3.pbs
-qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N deepvariants_${SampleID} -W depend=afterok:${alignment_jobid} 6b_deepvariants.pbs
+#qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N deepvariants_${SampleID} -W depend=afterok:${alignment_jobid} 6b_deepvariants.pbs
 
 # whatshap
 clair3_jobid=$(qstat -f | grep -w "clair3_${SampleID}" | grep -oP '(\d{8})$' | uniq)
@@ -35,8 +35,9 @@ qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N whatshap_${SampleID} -W depend=afte
 
 # extract_mod_haplo
 whatshap_jobid=$(qstat -f | grep -w "whatshap_${SampleID}" | grep -oP '(\d{8})$' | uniq)
-qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N haplo_mod_${SampleID} -W depend=afterok:${whatshap_jobid} 8_extract_mod_haplo.pbs
+#qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N haplo_mod_${SampleID} -W depend=afterok:${whatshap_jobid} 8_extract_mod_haplo.pbs
 
 # SV
 qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N delly_${SampleID} -W depend=afterok:${alignment_jobid} 9a_SV_delly.pbs
 qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N nanomonsv_${SampleID} -W depend=afterok:${alignment_jobid} 9b_SV_nanomonsv.pbs
+qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N severus_${SampleID} -W depend=afterok:${whatshap_jobid} 9c_SV_severus.pbs

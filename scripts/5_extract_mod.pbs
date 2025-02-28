@@ -1,16 +1,15 @@
 #PBS -r n
-#PBS -l mem=100GB,walltime=30:00:00,ncpus=12
+#PBS -l mem=100GB,walltime=30:00:00,ncpus=24
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au
 #PBS -v SampleID
 #PBS -v wk_dir
 
+
 module load htslib/1.19.1
 module load longread/python39venv
 module load samtools/1.17
 modkit="${HOME}/local/modkit_v0.3.1/modkit"
-
-mkdir -p "${wk_dir}/output_4mc/${SampleID}/Me"
 
 reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
 if [ $SampleID == "UWB1_BRCA1" ]
@@ -20,33 +19,33 @@ if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
 then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
 fi
 
-bam_mapped="${wk_dir}/output_4mc/${SampleID}/${SampleID}_mapped.bam"
-#bam_mapped="${wk_dir}/output_4mc/${SampleID}/${SampleID}_filtered_mapped.bam"
-me_pileup="${wk_dir}/output_4mc/${SampleID}/Me/${SampleID}_pileup"
-modkit_log="${wk_dir}/output_4mc/${SampleID}/Me/${SampleID}_modkit"
-me_extract="${wk_dir}/output_4mc/${SampleID}/Me/${SampleID}_extract_reads.tsv"
-me_summary="${wk_dir}/output_4mc/${SampleID}/Me/${SampleID}_modkit.summary"
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
+
+me_pileup="${wk_dir}/Me_all/${SampleID}_pileup"
+modkit_log="${wk_dir}/Me_all/${SampleID}_modkit"
+
+#pileup CpG 
+$modkit pileup $bam_mapped ${me_pileup}_${type}_cpg.bed --cpg --combine-strands --ref $reference_fa --threads 24 --log-filepath ${modkit_log}_pileup.log \
+--filter-threshold C:0.7 --filter-threshold A:0.8
+
+bgzip -k ${me_pileup}_${type}_cpg.bed
+tabix -p bed ${me_pileup}_${type}_cpg.bed.gz
 
 
-#$modkit pileup $bam_mapped ${me_pileup}_m.bed --cpg --ref $reference_fa --combine-strands --ignore h --threads 12 --log-filepath ${modkit_log}_m_pileup.log
-#sed -e 's/ /\t/g' ${me_pileup}_m.bed > ${wk_dir}/output_4mc/${SampleID}/Me/${SampleID}_m_pileup_tab.bed
-#bgzip -k ${me_pileup}_m.bed
-#tabix -p bed ${me_pileup}_m.bed.gz
-#rm ${me_pileup}_m.bed
+#pileup all mod
+$modkit pileup $bam_mapped ${me_pileup}_${type}_all.bed --ref $reference_fa --threads 24 --log-filepath ${modkit_log}_pileup.log \
+--filter-threshold C:0.7 --filter-threshold A:0.8
+
+bgzip -k ${me_pileup}_${type}_all.bed
+tabix -p bed ${me_pileup}_${type}_all.bed.gz
+
+#find motif
+$modkit find-motifs -i ${me_pileup}_${type}_all.bed -r $reference_fa -o ${me_pileup}_${type}_motif.tsv \
+--context-size 4 4 --min-coverage 10 \
+--threads 24 --log ${modkit_log}_motif.log
 
 
-$modkit pileup $bam_mapped ${me_pileup}.bed --cpg --ref $reference_fa --combine-strands --threads 12 --log-filepath ${modkit_log}_pileup.log
-sed -e 's/ /\t/g' $me_pileup.bed > ${wk_dir}/output_4mc/${SampleID}/Me/${SampleID}_pileup_tab.bed
-bgzip -k ${me_pileup}.bed
-tabix -p bed ${me_pileup}.bed.gz
-rm ${me_pileup}.bed
-
-#/working/lab_nicw/jiaZ/local/modkit/v0.2.3/modkit extract -t 12 --log-filepath ${modkit_log}_extract.log $bam_mapped $me_extract
-
-
-$modkit summary -t 12 $bam_mapped > $me_summary
-
-
-
-
-
+#BRCA1 reads extract
+$modkit extract $bam_mapped ${me_pileup}_${type}_brca1.tsv --threads 24 \
+--filter-threshold C:0.7 --filter-threshold A:0.8 \
+--reference $reference_fa --region chr17:43113041-43137714

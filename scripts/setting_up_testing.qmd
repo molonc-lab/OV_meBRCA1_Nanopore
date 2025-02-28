@@ -103,7 +103,7 @@ LOH <- fread("/working/lab_olgak/lijunX/20230417_PDX_HRD/Scott_-_Ovarian_cancer.
 
 #liftOver
 library(rtracklayer)
-ch = import.chain("hg19ToHg38.over.chain")
+ch = import.chain("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/hg19ToHg38.over.chain")
 ascat_cn_hg19 <- makeGRangesFromDataFrame(LOH, keep.extra.columns = T)
 seqlevelsStyle(ascat_cn_hg19) = "UCSC" 
 ascat_cn_hg38 <- liftOver(ascat_cn_hg19, ch)
@@ -112,8 +112,10 @@ LOH <- as.data.frame(ascat_cn_hg38) %>%
   mutate(chr = factor(chr, levels = c(paste0("chr", seq(1, 22)), "chrX"))) %>%
   filter( !is.na(chr))
 
-unphased_coverage %>%
-  left_join(phased_coverage) %>%
+wakhan_estimated_cn <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/WEHI_CS62/wakhan_2/bed_output/WEHI_CS62_copynumbers_segments.bed")
+
+LOH %>%
+  left_join(wakhan_estimated_cn) %>%
   mutate(chr = factor(chr, levels = c(paste0("chr", seq(1, 22)), "chrX"))) %>%
   filter( !is.na(chr)) %>%
   dplyr::rename(unphased = unphased_cov, phased = phased_cov) %>%
@@ -143,6 +145,9 @@ delly_estiamted_cn <- fread("delly_cnv_tumour.vcf", skip ="#CHROM") %>%
          CN = as.integer(CN),
          chr = `#CHROM`,
          chr = factor(chr, levels = c(paste0("chr", seq(1, 22)), "chrX")))
+
+
+
 
 lr_estimated_cn %>%
   ggplot()+

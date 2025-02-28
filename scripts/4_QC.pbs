@@ -19,7 +19,7 @@ mkdir -p ${wk_dir}/output/${SampleID}/coverage
 # parameters
 reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
 summary_output="${wk_dir}/output/${SampleID}/QC/${SampleID}_summary.tsv"
-bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
 
 delly_cnv_out_bcf="${wk_dir}/output/${SampleID}/CNV/${SampleID}_delly_cnv_out.cov.bcf"
 delly_cnv_out="${wk_dir}/output/${SampleID}/CNV/${SampleID}_delly_cnv_out.cov.gz"

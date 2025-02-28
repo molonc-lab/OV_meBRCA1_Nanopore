@@ -164,8 +164,8 @@ ggsave(plot = merged_plot, filename = "plots/nanopore_qc.pdf",  width = 210, hei
 
 ```
 
-#5mC 
-##global methylation
+#5mC ##global methylation
+
 ```{r}
 
 methylation_5mc_sampled  <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/intermediate/sampled_5mC.csv")
@@ -215,7 +215,9 @@ rbind(methylation_5hmc_sampled, methylation_5mc_sampled) %>%
   facet_grid(~group, scales = "free_x",space = "free_x")
 ggsave("plots/global_5hmc_5mc.pdf", width = 20, height =8)
 ```
+
 ## island collapsed
+
 ```{r}
 island_meth <- Sys.glob("output/*/Me/*pileup_island_tab.bed") %>%
   map_dfr(~ fread(.x, select = c(1,2,3,4,5,11),col.names = c("chrom", "start", "end", "mod_type", "Nvalid_cov", "fraction_mod"), nThread = 4) %>%
@@ -297,6 +299,7 @@ plot_list <- island_collapsed %>%
 ggarrange(plotlist = plot_list)
 
 ```
+
 ## brca1 plotting -+-500bps
 
 ```{r}
@@ -1003,7 +1006,9 @@ write.table(promo_stat, "plots/HOM_HET_promoter_wilcox.tsv", quote = F, row.name
 
 
 ```
+
 # SOLACE2 epigenetic factors
+
 ```{r}
 mane_file <- fread("ref/MANE.GRCh38.v1.3.ensembl_genomic_clean.tsv", sep = "\t", header = F, fill=TRUE) 
 mane_gene_coord <- mane_file %>%
@@ -1051,6 +1056,7 @@ solace2_vcf %>%
 sv <- fread("output/SOLACE2_0126S1_25285_T2/severus/all_SVs/severus_all.vcf", skip = "#CHROM") %>%
   inner_join(mane_gene_coord, by = join_by(`#CHROM` == chrom, POS >= gene_start, POS <= gene_end))
 ```
+
 ```{r}
 file <- Sys.glob("output/*/clair3/brca1_region.vcf")
 
@@ -1278,8 +1284,8 @@ uwb1_hic %>%
 
 ```
 
-
 # mysterious insertion at NBR2 LTR
+
 ```{r}
 meth_extr_169 <- fread("output/134169_6606_T2/Me/134169_6606_T2_brca1_mod.summary")
 insert_id_169 <-unlist(as.list(gsub("discordant: ", "", t(fread("output/134169_6606_T2/134169_6606_T2_LTR_readID.txt", skip = "discordant", nrow =1, header =F)))))
@@ -1319,6 +1325,5 @@ meth_extr_169 %>%
 
   
 ```
-
 
 The `echo: false` option disables the printing of code (only output is displayed).

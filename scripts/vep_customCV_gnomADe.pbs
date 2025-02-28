@@ -5,7 +5,7 @@
 #PBS -N VEP
 #PBS -S /bin/bash
 #PBS -j n
-#PBS -l walltime=10:00:00
+#PBS -l walltime=20:00:00
 #PBS -l ncpus=2
 #PBS -l mem=30gb
 #PBS -m ae
@@ -20,8 +20,8 @@ set -e
 # load VEP #
 ###########
 module load testing/1.0 vep/102
-input_file="${working_dir}/output/${SampleID}/deepvariants/vep_variants_hg38.vcf"
-output_filestem="${working_dir}/output/${SampleID}/deepvariants/${SampleID}"
+input_file="${working_dir}/output/${SampleID}/clair3/pileup.vcf.gz"
+output_filestem="${working_dir}/output/${SampleID}/clair3/${SampleID}"
 env
 cmd=(vep)
 cmd+=(--input_file "${input_file}")

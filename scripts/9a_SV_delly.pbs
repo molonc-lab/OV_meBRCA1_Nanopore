@@ -9,9 +9,15 @@ module load singularity/3.7.1
 module load samtools/1.17
 export OMP_NUM_THREADS=2
 
-reference_fa="/working/lab_nicw/jiaZ/data/genome/reference.fasta"
-#bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped.bam"
-bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_filtered_mapped.bam"
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+if [ $SampleID == "UWB1_BRCA1" ]
+then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"
+fi
+if [[ "$SampleID" =~ ^(OVCAR8|OVCAR8_LP_A6_30|WEHI_CS62|UWB1)$ ]]
+then reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+fi
+
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
 blacklist="/mnt/backedup/home/lijunX/local/Homo_sapiens.GRCh38.dna.primary_assembly.fa.r101.s501.blacklist.gz"
 
 mkdir -p ${wk_dir}/output/${SampleID}/SV

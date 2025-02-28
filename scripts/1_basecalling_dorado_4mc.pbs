@@ -1,5 +1,5 @@
 #PBS -r n
-#PBS -l mem=100GB,walltime=200:00:00,ncpus=16,ngpus=1
+#PBS -l mem=100GB,walltime=400:00:00,ncpus=16,ngpus=1
 #PBS -q gpu
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au

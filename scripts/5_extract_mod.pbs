@@ -10,7 +10,6 @@ module load htslib/1.19.1
 module load longread/python39venv
 module load samtools/1.17
 modkit="${HOME}/local/modkit_v0.3.1/modkit"
-
 reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
 if [ $SampleID == "UWB1_BRCA1" ]
 then reference_fa="/working/lab_olgak/lijunX/reference_uwb1_brca1/GCA_000001405.15_GRCh38_brca1_plasmid_uwb1.fa"

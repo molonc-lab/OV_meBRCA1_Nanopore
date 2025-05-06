@@ -1,0 +1,30 @@
+#PBS -r n
+#PBS -l mem=100GB,walltime=30:00:00,ncpus=24
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+
+
+module load conda-envs/severus-1.5
+wk_dir="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output"
+
+#mkdir -p ${wk_dir}/landing_pad_mapping/severus_a630
+#severus --target-bam ${wk_dir}/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_mapped_sc.bam \
+#--control-bam ${wk_dir}/OVCAR8/OVCAR8_mapped_sc.bam \
+#--out-dir ${wk_dir}/landing_pad_mapping/severus_a630 \
+#-t 24 \
+#--vntr-bed ~/Severus/vntrs/human_GRCh38_no_alt_analysis_set.trf.bed \
+#--write-alignments --resolve-overlaps \
+#--phasing-vcf ${wk_dir}/OVCAR8_LP_A6_30/clair3/phased_merge_output.vcf.gz \
+#--output-read-ids --PON ~/Severus/pon/PoN_1000G_hg38_extended.tsv.gz
+
+mkdir -p ${wk_dir}/landing_pad_mapping/severus_uwb1
+severus --target-bam ${wk_dir}/UWB1_BRCA1/UWB1_BRCA1_mapped_sc.bam \
+--control-bam ${wk_dir}/UWB1/UWB1_mapped_sc.bam \
+--out-dir ${wk_dir}/landing_pad_mapping/severus_uwb1 \
+-t 24 \
+--vntr-bed ~/Severus/vntrs/human_GRCh38_no_alt_analysis_set.trf.bed \
+--write-alignments --resolve-overlaps \
+--phasing-vcf ${wk_dir}/UWB1_BRCA1/clair3/phased_merge_output.vcf.gz \
+--output-read-ids --PON ~/Severus/pon/PoN_1000G_hg38_extended.tsv.gz
+

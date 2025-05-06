@@ -1,0 +1,25 @@
+#PBS -r n
+#PBS -l mem=64GB,walltime=00:40:00,ncpus=24
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+
+module load htslib/1.19.1
+module load samtools/1.17
+modkit="${HOME}/local/modkit_v0.3.1/modkit"
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+
+bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
+
+me_pileup="${wk_dir}/output/Me_all/${SampleID}_pileup_genehancer.bed"
+
+$modkit pileup $bam_mapped ${me_pileup} \
+--cpg \
+--ignore h \
+--filter-threshold C:0.7 \
+--ref $reference_fa \
+--threads 24 \
+--include-bed ${wk_dir}/ref/genehancer/genehancer_hg38_sorted.bed

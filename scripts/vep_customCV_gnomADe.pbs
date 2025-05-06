@@ -10,7 +10,7 @@
 #PBS -l mem=30gb
 #PBS -m ae
 #PBS -W umask=0007
-#PBS -v working_dir,SampleID
+#PBS -v wk_dir
 ################################################################################
 ################################################################################
 set -e
@@ -19,9 +19,9 @@ set -e
 ###########
 # load VEP #
 ###########
-module load testing/1.0 vep/102
-input_file="${working_dir}/output/${SampleID}/clair3/pileup.vcf.gz"
-output_filestem="${working_dir}/output/${SampleID}/clair3/${SampleID}"
+module load vep/102
+input_file="${wk_dir}/intermediate/BRCA1_variants_hg38.vcf"
+output_filestem="${wk_dir}/intermediate/BRCA1_annotated"
 env
 cmd=(vep)
 cmd+=(--input_file "${input_file}")
@@ -38,21 +38,19 @@ cmd+=(--no_progress)
 cmd+=(--offline)
 #cmd+=(--plugin "ExAC,/reference/data/ExAC/release1/subsets/ExAC_nonTCGA.r1.sites.vep.vcf.gz,AC,AN")
 #cmd+=(--plugin "ExACpLI")
-#cmd+=(--plugin "CADD,/reference/software/CADD/CADD-1.3/whole_genome_SNVs.tsv.gz,/reference/software/CADD/CADD-1.3/InDels.tsv.gz")
+cmd+=(--plugin "CADD,/reference/data/CADD/CADD-1.6/GRCh38/whole_genome_SNVs_inclAnno.tsv.gz,/reference/data/CADD/CADD-1.6/GRCh38/gnomad.genomes.r3.0.indel.tsv.gz")
 #cmd+=(--plugin "dbNSFP,/reference/data/dbNSFP/2.9.3/dbNSFP2.9.3.gz,ALL")
 #cmd+=(--plugin "dbscSNV,/reference/data/dbscSNV/1.1/dbscSNV1.1.txt.gz")
 #cmd+=(--plugin "MaxEntScan,/reference/data/MaxEntScan/fordownload,SWA,NCSS,verbose")
 #cmd+=(--plugin "REVEL,/working/genomeinfo/share/REVEL/revel_all_chromosomes.tsv.gz")
 #cmd+=(--plugin "HGVSIntronOffset")
-#cmd+=(--plugin "LRG_RefSeqGene,/working/genomeinfo/share/LRG_RefSeqGene/LRG_RefSeqGene")
-#cmd+=(--plugin "gnomAD,/reference/data/gnomAD/gnomad-public/r2.1.1/vcf/genomes,ALL")
+#cmd+=(--plugin "LRG_RefSeqGene,/reference/data/LRG_RefSeqGene/LRG_RefSeqGene")
+#cmd+=(--plugin "gnomAD,/reference/data/gnomAD/gnomad-public/4.1/vcf/genomes,ALL")
 #cmd+=(--plugin "gnomADc,/reference/data/gnomAD/gnomad-public/r2.0.2/coverage/exomes") # keeping old version for cov because plugin doesnt work for r.2.1.1
-#cmd+=(--custom /reference/data/clinvar/vcf_GRCh37/clinvar_20221001.vcf.gz,ClinVar,vcf,exact,0,ALLELEID,CLNDN,CLNDNINCL,CLNDISDB,CLNDISDBINCL,CLNHGVS,CLNREVSTAT,CLNSIG,CLNSIGCONF,CLNSIGINCL,CLNVC,CLNVCSO,CLNVI,DBVARID,GENEINFO,MC,ORIGIN,RS,SSR,CLNSUBA,CLNSIGA,CLNDATEA,CLNDATESUBA,CLNREVSTATA,CLNORA,CLNSCVA,CLNDNA,CLNCOMA)
-cmd+=(--custom /reference/data/clinvar/vcf_GRCh38/clinvar_20231007.vcf.gz,ClinVar,vcf,exact,0,ALLELEID,CLNDN,CLNDNINCL,CLNDISDB,CLNDISDBINCL,CLNHGVS,CLNREVSTAT,CLNSIG,CLNSIGCONF,CLNSIGINCL,CLNVC,CLNVCSO,CLNVI,DBVARID,GENEINFO,MC,ORIGIN,RS,SSR,CLNSUBA,CLNSIGA,CLNDATEA,CLNDATESUBA,CLNREVSTATA,CLNORA,CLNSCVA,CLNDNA,CLNCOMA)
+cmd+=(--custom /reference/data/clinvar/vcf_GRCh38/clinvar_20250409.vcf.gz,ClinVar,vcf,exact,0,ALLELEID,CLNDN,CLNDNINCL,CLNDISDB,CLNDISDBINCL,CLNHGVS,CLNREVSTAT,CLNSIG,CLNSIGCONF,CLNSIGINCL,CLNVC,CLNVCSO,CLNVI,DBVARID,GENEINFO,MC,ORIGIN,RS,SSR,CLNSUBA,CLNSIGA,CLNDATEA,CLNDATESUBA,CLNREVSTATA,CLNORA,CLNSCVA,CLNDNA,CLNCOMA)
 cmd+=(--tab)
 cmd+=(--dont_skip)
 cmd+=(--allow_non_variant)
-#cmd+=(--fasta /reference/genomes/GRCh37_ICGC_standard_v2/indexes/SAMTOOLS_1.4/GRCh37_ICGC_standard_v2.fa)
 cmd+=(--fasta /reference/genomes/GRCh38_no_alt_analysis_set/indexes/SAMTOOLS_1.2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa)
 cmd+=(--force_overwrite)
 cmd+=(--merged)

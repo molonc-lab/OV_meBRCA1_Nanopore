@@ -136,8 +136,14 @@ INS_reads %>%
 
 DEL_reads <- readRDS("output/total_del_meth.RDS")
 
+diff_id <- DEL_reads %>%
+  group_by(ID, read_type) %>%
+  summarise(mod_mean = mean(mod)) %>%
+  pivot_wider(names_from = read_type, values_from = mod_mean) %>%
+  filter(abs(alt-ref) > 0.3) %>%
+  pull(ID)
 DEL_reads %>%
-  filter(ID == "d_2241", ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
+  filter(ID =="d_2212", ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
   ggplot(aes(x = ref_position, y = read_id))+
   geom_rect(aes(xmin = SV_start, xmax =SV_end, ymin = -Inf, ymax = Inf ), fill = alpha("grey", 0.01))+
    geom_point(shape = 22, color = "black", aes(fill = mod))+
@@ -147,7 +153,7 @@ DEL_reads %>%
   theme(axis.ticks.y = element_blank(),
         axis.title.y =element_blank(),
         axis.text.y = element_blank())+
-  facet_wrap(~read_type, nrow = 2)
+  facet_wrap(~ID+read_type,scales = "free_x")
 
 DEL_change <- DEL_reads %>%
   mutate(shifted_position =case_when(ref_position > SV_start & ref_position < SV_end &read_type == "alt" ~ (ref_position - SV_start)/abs(SV_len)*2000,
@@ -538,7 +544,9 @@ BND %>%
   group_by(chr_start, SV_start, chr_end, SV_end, BND_type) %>%
   group_map(~plot_sv_diagram(.x$chr_start, .x$SV_start, .x$chr_end, .x$SV_end, .x$BND_type), .keep =T)
 ```
+
 #poster plot
+
 ```{r}
 
 BRCA1_meth <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/134048_7794_T2/Me/134048_7794_T2_m_pileup_tab.bed") %>%
@@ -597,8 +605,61 @@ BND_reads %>%
   scale_x_continuous(limits = c(-2000, 2000), name = "Position Relative to Breakpoint")
 ggsave("plots/ref_048.pdf", height =4, width = 4.7)
 
+
+
+
+
+BND_reads %>%
+  filter(ID == "r_293", SampleID =="134048_7794_T2", !(read_type == "ref" & SV_start ==42068378 ) )%>%
+  mutate(mod = if_else(mod == 0, "C", "5mC"),
+         relative_position = if_else(read_type == "ref", ref_position-SV_start, relative_position)) %>%
+  ggplot(aes(x = relative_position, y = read_id))+
+  #geom_rect(aes(xmin=0, xmax=Inf, ymin=-Inf, ymax=Inf), fill = alpha("#FCFFCC" , 0.05))  +
+   geom_point(shape = 15,  linewidth = 0.1, aes(color = mod),size =2.2 )+
+  scale_color_manual(values =  c("C" = "#2667ff", "5mC" = "#FF3225"), "Base Mod")+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "right")+
+ # geom_vline(aes(xintercept =0))+
+  geom_rect(aes(xmin = 43125192 - 43126525, xmax = 43125532- 43126525, ymin =  -0.7, ymax = -0.5),  fill="#3A4747", color = "#3A4747" , linewidth = 0.2)+
+  scale_x_continuous(limits = c(-2000, 2000), name = "Position Relative to Breakpoint")
+
+ggsave("plots/total_reads.pdf", height =8, width = 8)
 ```
 
+#ovcar8 presentation
+
+```{r}
+
+BRCA1_meth <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8//Me/OVCAR8_extracted_BRCA1.tsv") %>%
+  filter(mod_code == "m") %>%
+  mutate(mod = case_when(mod_qual >=0.7~ "5mC",
+                        mod_qual <= 0.4 ~"C")) 
+
+
+BRCA1_meth %>%
+  filter(!is.na(mod), ref_position>= 43125192-500, ref_position <=43125532+500 ) %>%
+  group_by(read_id) %>%
+  filter(n()>=20) %>%
+  ungroup()%>%  
+  ggplot(aes(x = ref_position, y = read_id))+
+  geom_point(shape = 15,  linewidth = 0.1, aes(color = mod),size =2.2 )+
+  scale_color_manual(values =  c("C" = "#2667ff", "5mC" = "#FF3225"), "Base Mod")+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "right")+
+  geom_rect(aes(xmin = 43125192, xmax = 43125532, ymin =  -0.7, ymax = -0.5),  fill="#3A4747", color = "#3A4747" , linewidth = 0.2)+
+  scale_x_continuous(limits = c(43125192-500, 43125532+500), name = "Position Relative to Breakpoint")
+
+
+ggsave("plots/total_reads.pdf", height =8, width = 8)
+
+read_mapping <- scanBam("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam", param = ScanBamParam(what=c("qname","rname", "pos", "qwidth"), where =))
+```
 
 ```{r}
 

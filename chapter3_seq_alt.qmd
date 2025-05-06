@@ -1,0 +1,2245 @@
+---
+title: "seq_alt_meth_change"
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+#| include: false
+# library(signal)
+library("data.table")
+library("ggplot2")
+library("tidyverse")
+library("purrr")
+library("scales")
+library("ggrepel")
+library(corrplot)
+library(ggpubr)
+library(tidyfast)
+library(dplyr)
+library(patchwork)
+library(stats)
+source("scripts/plotting_support.R")
+library(GenomicAlignments)
+library(Rsamtools)
+library(ggbeeswarm)
+library(rtracklayer)
+library(VennDiagram)
+
+```
+
+
+#General seq alt
+##isogenic sv extraction (DEL)
+```{r collapse=T}
+# isogenic_sv <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/somatic_SVs/severus_somatic.vcf"), skip = '#CHROM', fill=TRUE) %>%
+#   dplyr::rename(TUMOUR = 10) %>%
+#   filter(!str_detect(FILTER, "IMPRECISE")) %>%
+#   dplyr::select(-FORMAT) %>%
+#   separate(TUMOUR, into = c("GT", "VAF", "hVAF", "DR", "DV"), sep = ":") %>%
+#   mutate(VAF = as.numeric(VAF), DV= as.numeric(DV)) %>%
+#   filter(VAF > 0.1, DV >3, V11 == "", `#CHROM` %in% paste0("chr", seq(1, 22))) %>%
+#   mutate(SV_type = str_extract(INFO, "(?<=SVTYPE=)[^;]+"),
+#          SV_end = as.numeric(str_extract(INFO, "(?<=END=)[^;]+")),
+#          SV_len = as.numeric(str_extract(INFO, "(?<=SVLEN=)[^;]*")),
+#          SV_end = if_else(SV_type == "INS", POS, SV_end),
+#          BND_type = case_when(startsWith(ALT, "N[chr") ~1,
+#                               startsWith(ALT, "]chr") ~2,
+#                               startsWith(ALT, "N]chr") ~3,
+#                               startsWith(ALT, "[chr") ~4 ),
+#          ID = gsub("_1$|_2$", "", ID))%>%
+#   dplyr::rename(SV_start = POS)
+# # saveRDS(isogenic_sv, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_sv_merged.RDS"))
+# 
+# sv_severus_supporting_read <-  fread((paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/read_ids.csv"))) %>%
+#    `colnames<-`(c("ID", "T_READ_ID", "N_READ_ID")) %>%
+#   filter(ID %in% isogenic_sv$ID) %>%
+#   dplyr::select("ID", "T_READ_ID") %>%
+#   separate_rows(T_READ_ID, sep = "; ")
+# 
+# pileup_read_id_grange<- isogenic_sv %>%
+#     mutate(SV_end = if_else(is.na(SV_end), SV_start+1, SV_end)) %>%
+#     dplyr::select(seqnames = `#CHROM`, start = SV_start, end = SV_end) %>%
+#   distinct() %>%
+#   makeGRangesFromDataFrame(.)
+# 
+# rtracklayer::export.bed(pileup_read_id_grange, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_sv.bed"))
+# 
+# read_mapping <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_sv_readid.tsv"), col.names = c("sv","read_id")) %>%
+#   separate("sv", into = c("#CHROM", "SV_start", "SV_end")) %>%
+#   mutate(SV_start = as.numeric(SV_start)+1,
+#          SV_end = as.numeric(SV_end))%>%
+#   left_join(isogenic_sv %>%
+#               mutate(SV_end = if_else(is.na(SV_end), SV_start+1, SV_end)) )%>%
+#   separate_rows(read_id, sep = ",") %>%
+#   distinct() %>%
+#   mutate(read_type = if_else(read_id %in% sv_severus_supporting_read$T_READ_ID, "alt", "ref"))
+# 
+# saveRDS(read_mapping, file =paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_read_mapping.RDS"))
+
+```
+
+### SV DEL 
+```{r}
+DEL_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_read_mapping.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "DEL")
+
+DEL_reads_h453 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_merged_read_mapping.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "DEL")
+
+DEL_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_merged_read_mapping.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_merged_SV_modkit_extract.tsv",
+                                      type = "DEL")
+
+```
+####SV DEL overlap concordance
+```{r}
+overlapped_DEL_pileup_filt <- isogenic_overlap_svs(DEL_reads_h453, DEL_reads_a630, type = "DEL")
+overlapped_DEL_pileup_filt%>%
+  ggplot(aes(x = `OVCAR8 LP A6-30`, y = `OVCAR8 LP H4-53`))+
+  geom_point(alpha = 0.2)+
+  stat_cor(label.y = c(1.05,1))+
+  facet_wrap(~read_type)+
+  theme_bw()+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  theme(strip.background = element_rect(fill = NA))
+ggsave("plots/del_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
+
+isogenic_overlap_svs_venn(DEL_reads_h453, DEL_reads_a630, type = "DEL", "plots/del_overlap_ovcar8s.tiff")
+```
+####SV DEL merge
+```{r}
+overlapped_DEL_reads <- DEL_reads_h453 %>%
+  dplyr::select(chrom, SV_start, SV_end_453 = SV_end, ID_h453 =ID, REF, ALT, SV_type, SV_len_h453 =SV_len ) %>%
+  distinct() %>%
+  full_join(DEL_reads_a630 %>%
+  dplyr::select(chrom, SV_start, SV_end_630 = SV_end, ID_a630 =ID, REF, ALT, SV_type, SV_len_a630 = SV_len )%>%
+    distinct())%>%
+  mutate(commonID = case_when(!is.na(ID_h453) &!is.na(ID_a630) ~ paste0(ID_h453, "_common"), 
+                                !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
+                                !is.na(ID_a630) ~ paste0(ID_a630, "_a630")),
+         commonend = pmax(SV_end_453 ,SV_end_630, na.rm = T))
+
+
+merged_DEL <-rbind(DEL_reads_h453 %>%
+                     left_join(overlapped_DEL_reads %>%
+                                 filter(!is.na(ID_h453)) %>%
+                                       dplyr::select(ID = ID_h453, commonID, commonend)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end = commonend, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod) %>%
+          mutate(Sample = "OVCAR8 LP H4-53"),
+      DEL_reads_a630 %>%
+        inner_join(overlapped_DEL_reads %>%
+                      filter(!is.na(ID_a630))  %>%
+                                       dplyr::select(ID = ID_a630, commonID, commonend)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end = commonend, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod)%>%
+          mutate(Sample = "OVCAR8 LP A6-30"))%>%
+  dplyr::select(ID, SV_start, SV_end, ref_position, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample) %>%
+  distinct() %>%
+  rbind(DEL_reads_uwb1_brca1 %>%
+          mutate(Sample = if_else(read_type == "parent", "UWB1", "UWB1 BRCA1"),
+                 ID = paste0(ID, "_U")) %>%
+          dplyr::select(ID, SV_start, read_id, SV_end, ref_position, chrom, mod_strand, ref_strand, mod, read_type, Sample)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position)) %>%
+  group_by(ID, SV_start, SV_end, ref_position, chrom,  read_type) %>%
+  filter(n()>3) %>%
+  summarise(Meth = sum(mod == "Me"), read_cnts = n(),
+            Unmeth = read_cnts - Meth,
+            meth_perc = Meth/read_cnts) %>%
+  ungroup() 
+
+plot_DEL <- merged_DEL %>%
+  filter(read_type == "parent", (meth_perc >=0.8| meth_perc <= 0.2) ) %>%
+  dplyr::select(ref_position, chrom, p_meth_perc= meth_perc) %>%
+  distinct() %>%
+  inner_join(merged_DEL%>%
+              filter(read_type == "ref")) %>%
+  filter(abs(meth_perc - p_meth_perc) <=0.2) %>%
+  dplyr::select(ref_position, chrom, ID) %>%
+  distinct() %>%
+  inner_join(merged_DEL %>%
+              filter(read_type != "parent")) %>%
+  mutate(relat_pos = case_when(ref_position <= SV_start ~ ref_position -SV_start,
+                               ref_position >= SV_end ~ ref_position -SV_end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  mutate( SV_len = SV_end - SV_start)%>%
+  distinct()%>%
+  group_by(SV_len, ID, ref_position) %>%
+  filter(n_distinct(read_type)==2) %>%
+  ungroup() %>%
+  drop_na() %>%
+  arrange(SV_len, ID, ref_position, read_type)
+
+
+CpG_DEL_fisher <- plot_DEL  %>%
+  dplyr::select(ID, ref_position,chrom, read_type, Meth, Unmeth, SV_len) %>%
+  pivot_wider(values_from = c(Meth, Unmeth),names_from = read_type)%>%
+  distinct() %>%
+  group_by(ID, ref_position, SV_len) %>%
+  rowwise() %>%
+  mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
+  mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
+  group_by(ID) %>%
+  mutate(fisher.adj = p.adjust(p.value),
+         sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
+  ungroup()  
+
+
+plot_DEL_density <- plot_DEL%>%
+  dplyr::select(-c(Meth, Unmeth, read_cnts)) %>%
+  pivot_wider(values_from = meth_perc, names_from = read_type) %>%
+  mutate(relat_pos = case_when(ref_position <= SV_start ~ ref_position -SV_start,
+                               ref_position >= SV_end ~ ref_position -SV_end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  mutate(diff = alt- ref) %>%
+  distinct() 
+
+plot_DEL_density$density <-get_density(plot_DEL_density$relat_pos, plot_DEL_density$diff, n =40)
+```
+
+####plot SV DEL MERGE
+```{r}
+
+plot_DEL_density%>%
+  left_join(CpG_DEL_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = density))+
+  geom_point(alpha= 0.8,aes(shape = sig))+
+  theme_bw()+
+  scale_color_viridis_c( name = "density")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("DEL (SV)")+
+  coord_cartesian(xlim= c(-5000, 5000))
+
+ggsave("plots/DEL_change.png", width = 8, height = 4,)
+unique(plot_DEL_density$ID)
+
+
+plot_DEL_density%>%
+  left_join(CpG_DEL_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = sig))+
+  geom_point(alpha= 0.8)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("DEL (SV)")+
+  coord_cartesian(xlim= c(-5000, 5000))+
+   scale_color_manual(values = c( "red","black"), "Sig diff & abs(diff) >= 0.8")+
+  facet_wrap(~ID)
+
+ggsave("plots/DEL_change_indv.pdf", width = 16, height = 14)
+
+CpG_DEL_fisher%>%
+  group_by(ID,SV_len) %>%
+  summarise(sig_n = sum(sig), 
+            CpG_n = n(),
+            changed = sig_n >0) %>%
+  ungroup()%>%
+  group_by(changed) %>%
+  mutate(changed = paste0(changed, " (N=", n(), ")"),
+         changed = factor(changed, levels = c("TRUE (N=42)", "FALSE (N=94)"))) %>%
+  ggplot(aes(x = changed, y = SV_len, color = changed))+
+  geom_boxplot()+
+  geom_beeswarm()+
+  stat_compare_means()+
+  scale_y_log10()+
+  scale_color_manual(values = c( "red","black"))+
+  theme_bw()+
+  ylab("DEL length (bp)")+
+  xlab("SV with CpG methylation changed (T/F)")+
+  theme(legend.position = "none")
+ggsave("plots/DEL_change_sv_len.pdf", height = 4, width =4)
+
+ 
+CpG_DEL_fisher%>%
+  inner_join(plot_DEL %>%
+               dplyr::select(ref_position, ID, chrom, relat_pos)) %>%
+  filter(sig) %>%
+  mutate(side = if_else(relat_pos >0, "downstream of BP", "upstream of BP"),
+         relat_pos = relat_pos/abs(relat_pos)*SV_len/2 + relat_pos) %>%
+  group_by(ID,side, SV_len) %>%
+  summarise(sig_n =sum(sig), min_dist = min(abs(relat_pos))) %>%
+  ungroup()  %>%
+  group_by(ID) %>%
+  filter(n_distinct(side)==2) %>%
+  ggplot(aes(y = min_dist, x = side, color = side))+
+  geom_boxplot(outlier.shape = NA, alpha = 0.7)+
+  scale_y_continuous("Minimum distance to middle of SV")+
+  geom_beeswarm()+
+  theme_bw()+
+  theme(legend.position = "none", axis.title.x = element_blank())
+ggsave("plots/desicion_motif_distance_middle.pdf", height=5, width = 4.5)
+
+CpG_DEL_fisher%>%
+  inner_join(plot_DEL %>%
+               dplyr::select(ref_position, ID, chrom, relat_pos)) %>%
+  filter(sig) %>%
+  mutate(side = if_else(relat_pos >0, "downstream of BP", "upstream of BP")) %>%
+  group_by(ID,side, SV_len) %>%
+  summarise(sig_n =sum(sig), min_dist = min(abs(relat_pos))) %>%
+  ungroup()  %>%
+  group_by(ID) %>%
+  filter(n_distinct(side)==2) %>%
+  ggplot(aes(y = min_dist, x = side, color = side))+
+  geom_boxplot(outlier.shape = NA, alpha = 0.7)+
+  scale_y_continuous("Minimum distance to bp of SV")+
+  geom_beeswarm()+
+  theme_bw()+
+  theme(legend.position = "none", axis.title.x = element_blank())
+ggsave("plots/desicion_motif_distance_middle.pdf", height=5, width = 4.5)
+
+CpG_DEL_fisher %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  inner_join(plot_DEL_density) %>%
+  mutate(direction = if_else(relat_pos <0, "Upstream of BP", "Downstream of BP"),
+         relat_pos = abs(relat_pos)) %>%
+  ggboxplot(x = "sig", y = "relat_pos", color = "sig", facet.by = "direction")+
+  scale_color_manual(values = c( "red","black"),"Sig diff & abs(diff) >=0.8")+
+   theme(legend.position = "bottom")+
+  stat_compare_means(comparisons = list(c("TRUE", "FALSE")), aes(label=..p.adj..))+
+  ylab("Abs dist to breakpoint (bp)")+
+  theme(strip.background = element_rect(fill = NA), 
+        axis.title.x = element_blank())
+ggsave("plots/DEL_change_sv_dist.pdf", height = 5, width =6)
+
+CpG_DEL_fisher%>%
+  inner_join(plot_DEL %>%
+               dplyr::select(SV_start, SV_end, ID, chrom, SV_len) %>%
+               distinct()) %>%
+  group_by(ID,SV_len, chrom, SV_start, SV_end) %>%
+  summarise(sig_n = sum(sig), 
+            CpG_n = n_distinct(ref_position),
+            changed = sig_n >0)%>%
+  left_join(isl_complete, by =join_by(chrom == chrom, SV_end >= chromStart, SV_start <= chromEnd)) %>%
+  group_by(ID,SV_len, chrom, SV_start, SV_end, sig_n, CpG_n, changed) %>%
+  summarise(type = paste0(unique(type), collapse = ", ")) %>%
+  mutate(pri_type = case_when(str_detect(type, "Island") ~"Island",
+                              str_detect(type, "Shore") ~"Shore",
+                              str_detect(type, "Shelf") ~"Shelf",
+                              TRUE ~ "Open Sea")) %>%
+  group_by(changed, pri_type) %>%
+  summarise(n= n())
+  ggplot(aes(x = changed, fill = pri_type))+
+  geom_bar(stat = "count")
+
+  
+merged_DEL %>%
+  dplyr::select(chrom, ref_position) %>%
+  distinct() %>%
+  mutate(start_w = ref_position-20, end_w = ref_position +20) %>%
+  left_join(merged_DEL%>%
+  dplyr::select(chrom, pos = ref_position) %>%
+  distinct() , by = join_by(start_w < pos, end_w >pos, chrom == chrom)) %>%
+    group_by(chrom, ref_position, start_w, end_w) %>%
+    summarise(adj_n = n()-1) %>%
+  right_join(CpG_DEL_fisher %>%
+              group_by(chrom, ref_position) %>%
+              summarise(changed = sum(sig)>0)) %>%
+  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = adj_n, fill = changed))+
+  geom_histogram()+
+  facet_wrap(~changed, scale = "free_y")+
+  xlab("# Adjacent CpG (+-20bp window)")+
+  ylab("# CpG")+
+  scale_fill_manual(values = c( "red","black"))+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = NA),legend.position = "bottom")
+ ggsave("plots/DEL_change_cpg_density.pdf", height = 4, width = 7)
+ 
+density_del <- merged_DEL %>%
+  dplyr::select(chrom, ref_position) %>%
+  distinct() %>%
+  mutate(start_w = ref_position-20, end_w = ref_position +20) %>%
+  left_join(merged_DEL%>%
+  dplyr::select(chrom, pos = ref_position) %>%
+  distinct() , by = join_by(start_w < pos, end_w >pos, chrom == chrom)) %>%
+    group_by(chrom, ref_position, start_w, end_w) %>%
+    summarise(adj_n = n()-1) %>%
+  right_join(CpG_DEL_fisher %>%
+              group_by(chrom, ref_position) %>%
+              summarise(changed = sum(sig)>0)) %>%
+  mutate(changed = factor(changed, levels = c("TRUE", "FALSE")),
+         adj_n_group = if_else(adj_n >=3, ">=3", as.character(adj_n))) %>%
+   group_by(adj_n_group, changed) %>%
+   summarise(n=n()) 
+ ggsave("plots/DEL_change_cpg_density.pdf", height = 4, width = 5)
+
+chisq <- density_del %>%
+  pivot_wider(values_from = n, names_from = changed) %>%
+  column_to_rownames("adj_n_group")%>%
+  chisq.test()
+chisq$
+
+density_del %>%
+  mutate(adj_n_group = factor(adj_n_group, levels = c("0", "1", "2", ">=3"))) %>%
+  ggplot(aes(x= changed, y = n, fill = adj_n_group)) +
+  geom_bar(stat = "identity", position = "fill", color = "black")+
+  scale_fill_manual(values = c("#e0fbfc","#94d2bd", "#0a9396", "#005f73"), "#Adj CpG")+
+  geom_text(aes(label = paste0("N=",n)), position = position_fill(vjust = 0.5))+
+  theme_bw()+
+  xlab("Sig diff & abs(diff) >=0.8")+
+  scale_y_continuous(labels = scales::percent, "Proportion")+
+  theme(legend.position = "bottom")
+
+
+
+CpG_DEL_fisher %>%
+  group_by(ID) %>%
+  summarise(changed = sum(sig)>0) %>%
+  mutate(Sample = case_when(str_detect(ID, "_U$") ~ "UWB1", 
+                            str_detect(ID, "_a630") ~"OVCAR8 LP A6-30",
+                            ID %in% unlist(drop_na(overlapped_DEL_reads) %>%
+                              pull(commonID)) ~ "OVCAR8 common",
+                            TRUE ~ "OVCAR8 LP H4-53")) %>%
+  mutate(changed = factor(changed, levels =c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = Sample, fill = changed))+
+  geom_bar(stat = "count")+
+  theme_bw()+
+  scale_fill_manual(values = c( "red","black"))+
+  ylab("# SV DEL")+
+  theme(legend.position = "bottom")
+
+ggsave("plots/SV_del_changed_per_sample.pdf", height = 4, width = 7)
+```
+##isogenic sv extraction (INS)
+```{r collapse=T}
+# source("scripts/meth_sv/sv_extract_support.R")
+# sample = "uwb1_brca1"
+# 
+# sv_merged <- readRDS(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_sv_merged.RDS"))
+# 
+# sv_merged %>%
+#   filter(SV_type == "INS") %>%
+#   arrange(ID) %>%
+#   dplyr::select(ID) %>%
+#   left_join(read_mapping%>%
+#             dplyr::select(ID, read_id, read_type)) %>%
+#   filter(read_type == "alt") %>%
+#   pull(read_id) %>%
+#   unique(.)%>%
+#   write_lines(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/", "/ins_read_name.tsv"))
+# 
+# 
+# modkit_extract <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_SV_modkit_extract.tsv")) %>%
+#   filter(mod_code == "m") %>%
+#   dplyr::select(read_id, forward_read_position, ref_position,chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual)
+# 
+# 
+# ins_primary_mapping <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/ins_read_name_primary_map.tsv"), col.names = c("read_id",  "flag", "rname", "pos", "cigar")) %>%
+#   mutate(strand = if_else(flag %in% c(16, 2064), "-", "+")) %>%
+#   rowwise() %>%
+#   mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+#   separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+#   mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+#          read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+#   dplyr::select(-pos, -flag)
+# 
+# ins_supporting_reads <- ins_primary_mapping %>%
+#   left_join(modkit_extract %>%
+#               dplyr::select(read_id, forward_read_position, read_length, mod_qual, base_qual, ref_position) %>%
+#               distinct(),
+#             by =join_by(read_id == read_id, read_start <= forward_read_position, read_end >= forward_read_position)) %>%
+#   dplyr::rename(chrom = rname, ref_strand = strand) %>%
+#   filter(!is.na(forward_read_position) ) %>%
+#   mutate(ref_start = if_else(ref_strand == "-", ref_end, ref_start)) %>%
+#   left_join(read_mapping %>%
+#               dplyr::select(read_id, ID) %>%
+#               left_join(sv_merged %>%
+#               dplyr::select(ID, SV_start)) %>%
+#               distinct())
+# 
+# ins_shift = setDT(ins_supporting_reads %>%
+#                     filter(ref_position== -1))
+# ins_shift[, shift_position := deduce_ref_pos_ins_shift(cigar, ref_start, forward_read_position, ref_strand, SV_start)]
+# 
+# 
+# INS <- sv_merged %>%
+#   filter(SV_type == "INS")
+# 
+# INS_reads <- INS %>%
+#   left_join(read_mapping%>%
+#               dplyr::select(ID, read_id,  read_type)) %>%
+#   left_join(modkit_extract)
+# 
+# merged_INS_reads <- INS_reads %>%
+#   left_join(ins_shift %>%
+#               dplyr::select(read_id, forward_read_position, ID, shift_position)) %>%
+#   mutate(shift_position = case_when(ref_position != -1 & ref_position <= SV_start ~ ref_position,
+#                                     ref_position != -1 & ref_position > SV_start ~ ref_position+ SV_len,
+#                                     T ~ shift_position),
+#          shift_position = if_else(ref_position == -1 & ref_strand == "-", shift_position +SV_len, shift_position  ))
+# 
+# saveRDS(merged_INS_reads, file = paste0( "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/", sample,"_INS_meth.RDS"))
+
+```
+
+###SV INS
+```{r}
+INS_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_INS_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "INS")
+
+INS_reads_h453 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_INS_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "INS")
+
+INS_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_INS_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_merged_SV_modkit_extract.tsv",
+                                      type = "INS")
+
+```
+####SV INS overlap concordance
+```{r}
+overlapped_INS_pileup_filt <- isogenic_overlap_svs(INS_reads_h453, INS_reads_a630, type = "INS")
+
+overlapped_INS_pileup_filt%>%
+  ggplot(aes(x = `OVCAR8 LP A6-30`, y = `OVCAR8 LP H4-53`))+
+  geom_point(alpha = 0.2)+
+  stat_cor(label.y = c(1.05,1))+
+  facet_wrap(~read_type)+
+  theme_bw()+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  theme(strip.background = element_rect(fill = NA))
+ggsave("plots/del_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
+
+isogenic_overlap_svs_venn(INS_reads_h453, INS_reads_a630, type = "INS", "plots/ins_overlap_ovcar8s.tiff")
+```
+
+####SV INS merge
+```{r}
+overlapped_INS_reads <- INS_reads_h453 %>%
+  dplyr::select(chrom, SV_start, SV_end_453 = SV_end, ID_h453 =ID, REF, SV_type, SV_len_h453 =SV_len ) %>%
+  distinct() %>%
+  full_join(INS_reads_a630 %>%
+  dplyr::select(chrom, SV_start, SV_end_630 = SV_end, ID_a630 =ID, REF, SV_type, SV_len_a630 = SV_len )%>%
+    distinct())%>%
+  mutate(commonID = case_when(!is.na(ID_h453) &!is.na(ID_a630) ~ paste0(ID_h453, "_common"), 
+                                !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
+                                !is.na(ID_a630) ~ paste0(ID_a630, "_a630")),
+         commonend = pmax(SV_end_453 ,SV_end_630, na.rm = T),
+         commonSV_len = pmax(SV_len_h453 ,SV_len_a630 , na.rm = T ))
+
+merged_INS <-rbind(INS_reads_h453 %>% 
+                     left_join(overlapped_INS_reads %>%
+                                 filter(!is.na(ID_h453)) %>%
+                                       dplyr::select(ID = ID_h453, commonID, commonend, commonSV_len)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end = commonend, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, SV_len= commonSV_len) %>%
+          mutate(Sample = "OVCAR8 LP H4-53"),
+      INS_reads_a630 %>%
+        inner_join(overlapped_INS_reads %>%
+                      filter(!is.na(ID_a630))  %>%
+                                       dplyr::select(ID = ID_a630, commonID, commonend, commonSV_len)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end = commonend, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, SV_len =commonSV_len )%>%
+          mutate(Sample = "OVCAR8 LP A6-30"))%>%
+  dplyr::select(ID, SV_start, SV_end, ref_position, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample, SV_len) %>%
+  distinct() %>%
+  rbind(INS_reads_uwb1_brca1 %>%
+          mutate(Sample = if_else(read_type == "parent", "UWB1", "UWB1 BRCA1"),
+                 ID = paste0(ID, "_U")) %>%
+          dplyr::select(ID, SV_start, read_id, SV_end, ref_position, chrom, mod_strand, ref_strand, mod, read_type, Sample, SV_len)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position)) %>%
+  group_by(ID, SV_start, SV_end, ref_position, chrom,  read_type, SV_len) %>%
+  filter(n()>3) %>%
+  summarise(Meth = sum(mod == "Me"), read_cnts = n(),
+            Unmeth = read_cnts - Meth,
+            meth_perc = Meth/read_cnts) %>%
+  ungroup() 
+
+plot_INS <- merged_INS %>%
+  filter(read_type == "parent", (meth_perc >=0.8| meth_perc <= 0.2) ) %>%
+  dplyr::select(ref_position, chrom, p_meth_perc= meth_perc) %>%
+  distinct() %>%
+  inner_join(merged_INS%>%
+              filter(read_type == "ref")) %>%
+  filter(abs(meth_perc - p_meth_perc) <=0.2) %>%
+  dplyr::select(ref_position, chrom, ID) %>%
+  distinct() %>%
+  inner_join(merged_INS %>%
+              filter(read_type != "parent")) %>%
+  mutate(relat_pos = case_when(ref_position <= SV_start ~ ref_position -SV_start,
+                               ref_position >= SV_end ~ ref_position -SV_end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  distinct()%>%
+  group_by(SV_len, ID, ref_position) %>%
+  filter(n_distinct(read_type)==2) %>%
+  ungroup() %>%
+  drop_na() %>%
+  arrange(SV_len, ID, ref_position, read_type)
+
+
+CpG_INS_fisher <- plot_INS  %>%
+  dplyr::select(ID, ref_position,chrom, read_type, Meth, Unmeth, SV_len) %>%
+  pivot_wider(values_from = c(Meth, Unmeth),names_from = read_type)%>%
+  distinct() %>%
+  group_by(ID, ref_position, SV_len) %>%
+  rowwise() %>%
+  mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
+  mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
+  group_by(ID) %>%
+  mutate(fisher.adj = p.adjust(p.value),
+         sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
+  ungroup()  
+
+
+plot_INS_density <- plot_INS%>%
+  dplyr::select(-c(Meth, Unmeth, read_cnts)) %>%
+  pivot_wider(values_from = meth_perc, names_from = read_type) %>%
+  mutate(relat_pos = case_when(ref_position <= SV_start ~ ref_position -SV_start,
+                               ref_position >= SV_end ~ ref_position -SV_end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  mutate(diff = alt- ref) %>%
+  distinct() 
+
+
+plot_INS_density$density <-get_density(plot_INS_density$relat_pos, plot_INS_density$diff, n =40)
+```
+
+####plot SV INS MERGE
+```{r}
+plot_INS_density%>%
+  left_join(CpG_INS_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = density, shape = sig))+
+  geom_point(alpha= 0.8)+
+  theme_bw()+
+  scale_color_viridis_c( name = "density")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("INS (SV)")+
+  coord_cartesian(xlim= c(-5000, 5000))
+
+ggsave("plots/INS_change.png", width = 8, height = 4)
+unique(plot_INS_density$ID)
+
+
+plot_INS_density%>%
+  left_join(CpG_INS_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = sig))+
+  geom_point(alpha= 0.8)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("INS (SV)")+
+  coord_cartesian(xlim= c(-5000, 5000))+
+   scale_color_manual(values = c( "red","black"), "Sig diff & diff >= 0.8")+
+  facet_wrap(~ID)
+
+ggsave("plots/INS_change_indv.pdf", width = 16, height = 14)
+
+CpG_INS_fisher%>%
+  group_by(ID,SV_len) %>%
+  summarise(sig_n = sum(sig), 
+            CpG_n = n(),
+            changed = sig_n >0) %>%
+  ungroup()%>%
+  group_by(changed) %>%
+  mutate(changed = paste0(changed, " (N=", n(), ")"),
+         changed = factor(changed, levels = c("TRUE (N=7)", "FALSE (N=15)"))) %>%
+  ggplot(aes(x = changed, y = SV_len, color = changed))+
+  geom_boxplot()+
+  geom_beeswarm()+
+  stat_compare_means()+
+  scale_y_log10()+
+  scale_color_manual(values = c( "red","black"))+
+  theme_bw()+
+  ylab("INS length (bp)")+
+  xlab("SV with CpG methylation changed (T/F)")+
+  theme(legend.position = "none")
+ggsave("plots/INS_change_sv_len.pdf", height = 4, width =4)
+
+ 
+CpG_INS_fisher%>%
+  inner_join(plot_INS %>%
+               dplyr::select(ref_position, ID, chrom, relat_pos)) %>%
+  filter(sig) %>%
+  mutate(side = if_else(relat_pos >0, "downstream of BP", "upstream of BP"),
+         relat_pos = relat_pos/abs(relat_pos)*SV_len/2 + relat_pos) %>%
+  group_by(ID,side, SV_len) %>%
+  summarise(sig_n =sum(sig), min_dist = min(abs(relat_pos))) %>%
+  ungroup()  %>%
+  group_by(ID) %>%
+  filter(n_distinct(side)==2) %>%
+  ggplot(aes(y = min_dist, x = side, color = side))+
+  geom_boxplot(outlier.shape = NA, alpha = 0.7)+
+  scale_y_continuous("Minimum distance to middle of SV")+
+  geom_beeswarm()+
+  theme_bw()+
+  theme(legend.position = "none", axis.title.x = element_blank())
+ggsave("plots/desicion_motif_distance_middle.pdf", height=5, width = 4.5)
+
+
+CpG_INS_fisher %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  inner_join(plot_INS_density) %>%
+  group_by(ID, ref_position) %>%
+  ggplot(aes(y= abs(relat_pos), x = sig, color =sig)) +
+  geom_boxplot()+
+  stat_compare_means()+
+  scale_color_manual(values = c( "red","black"))+
+  ylab("Abs dist to breakpoint (bp)")+
+  xlab("Sig meth diff & abs(diff) >=0.8") +
+  theme_bw()+
+  theme(legend.position = "none")
+ggsave("plots/INS_change_sv_dist.pdf", height = 4, width =4)
+
+CpG_INS_fisher%>%
+  inner_join(plot_INS %>%
+               dplyr::select(SV_start, SV_end, ID, chrom, SV_len) %>%
+               distinct()) %>%
+  group_by(ID,SV_len, chrom, SV_start, SV_end) %>%
+  summarise(sig_n = sum(sig), 
+            CpG_n = n_distinct(ref_position),
+            changed = sig_n >0)%>%
+  left_join(isl_complete, by =join_by(chrom == chrom, SV_end >= chromStart, SV_start <= chromEnd)) %>%
+  group_by(ID,SV_len, chrom, SV_start, SV_end, sig_n, CpG_n, changed) %>%
+  summarise(type = paste0(unique(type), collapse = ", ")) %>%
+  mutate(pri_type = case_when(str_detect(type, "Island") ~"Island",
+                              str_detect(type, "Shore") ~"Shore",
+                              str_detect(type, "Shelf") ~"Shelf",
+                              TRUE ~ "Open Sea")) %>%
+  group_by(changed, pri_type) %>%
+  summarise(n= n())
+  ggplot(aes(x = changed, fill = pri_type))+
+  geom_bar(stat = "count")
+
+  
+merged_INS %>%
+  dplyr::select(chrom, ref_position) %>%
+  distinct() %>%
+  mutate(start_w = ref_position-10, end_w = ref_position +10) %>%
+  left_join(merged_INS%>%
+  dplyr::select(chrom, pos = ref_position) %>%
+  distinct() , by = join_by(start_w < pos, end_w >pos, chrom == chrom)) %>%
+    group_by(chrom, ref_position, start_w, end_w) %>%
+    summarise(adj_n = n()) %>%
+  inner_join(CpG_INS_fisher %>%
+              group_by(chrom, ref_position) %>%
+              summarise(changed = sum(sig)>0)) %>%
+  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = adj_n, fill = changed))+
+  geom_histogram()+
+  facet_wrap(~changed, scale = "free_y")+
+  xlab("# Adjacent CpG (20bp window)")+
+  ylab("# CpG")+
+  scale_fill_manual(values = c( "red","black"))+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = NA),legend.position = "bottom")
+ ggsave("plots/INS_change_cpg_density.pdf", height = 4, width = 7)
+ 
+ 
+ CpG_INS_fisher %>%
+  group_by(ID) %>%
+  summarise(changed = sum(sig)>0) %>%
+  mutate(Sample = case_when(str_detect(ID, "_U$") ~ "UWB1", 
+                            str_detect(ID, "_a630") ~"OVCAR8 LP A6-30",
+                            ID %in% unlist(drop_na(overlapped_INS_reads) %>%
+                              pull(commonID)) ~ "OVCAR8 common",
+                            TRUE ~ "OVCAR8 LP H4-53")) %>%
+  mutate(changed = factor(changed, levels =c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = Sample, fill = changed))+
+  geom_bar(stat = "count")+
+  theme_bw()+
+  scale_fill_manual(values = c( "red","black"))+
+  ylab("# SV INS")+
+  theme(legend.position = "bottom")
+ggsave("plots/SV_INS_changed_per_sample.pdf", height = 4, width = 7)
+
+```
+##isogenic sv extraction (DUP)
+```{r collapse=T}
+# source("scripts/meth_sv/sv_extract_support.R")
+# sample = "uwb1_brca1"
+# 
+# sv_merged <- readRDS(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_sv_merged.RDS"))
+# 
+# read_mapping <- readRDS(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_read_mapping.RDS"))
+# 
+# sv_merged %>%
+#   filter(SV_type == "DUP") %>%
+#   arrange(ID) %>%
+#   dplyr::select(ID) %>%
+#   left_join(read_mapping%>%
+#             dplyr::select(ID, read_id, read_type)) %>%
+#   filter(read_type == "alt") %>%
+#   pull(read_id) %>%
+#   unique(.)%>%
+#   write_lines(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/", "/dup_read_name.tsv"))
+# 
+# 
+# modkit_extract <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_SV_modkit_extract.tsv")) %>%
+#   filter(mod_code == "m") %>%
+#   dplyr::select(read_id, forward_read_position, ref_position,chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual)
+# 
+# 
+# dup_primary_mapping <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/dup_read_name_primary_map.tsv"), col.names = c("read_id",  "flag", "rname", "pos", "cigar")) %>%
+#   mutate(strand = if_else(flag %in% c(16, 2064), "-", "+")) %>%
+#   rowwise() %>%
+#   mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+#   separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+#   mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+#          read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+#   dplyr::select(-pos, -flag)
+# 
+# dup_supporting_reads <- dup_primary_mapping %>%
+#   left_join(modkit_extract %>%
+#               dplyr::select(read_id, forward_read_position, read_length, mod_qual, base_qual, ref_position) %>%
+#               distinct(),
+#             by =join_by(read_id == read_id, read_start <= forward_read_position, read_end >= forward_read_position)) %>%
+#   dplyr::rename(chrom = rname, ref_strand = strand) %>%
+#   filter(!is.na(forward_read_position) ) %>%
+#   mutate(ref_start = if_else(ref_strand == "-", ref_end, ref_start)) %>%
+#   left_join(read_mapping %>%
+#               dplyr::select(read_id, ID) %>%
+#               left_join(sv_merged %>%
+#               dplyr::select(ID, SV_start)) %>%
+#               distinct())
+# 
+# dup_shift = setDT(ins_supporting_reads %>%
+#                     filter(ref_position== -1))
+# dup_shift[, shift_position := deduce_ref_pos_ins_shift(cigar, ref_start, forward_read_position, ref_strand, SV_start)]
+# 
+# 
+# DUP <- sv_merged %>%
+#   filter(SV_type == "DUP")
+# 
+# DUP_reads <- DUP %>%
+#   left_join(read_mapping%>%
+#               dplyr::select(ID, read_id,  read_type)) %>%
+#   left_join(modkit_extract)
+# 
+# merged_DUP_reads <- DUP_reads %>%
+#   left_join(ins_shift %>%
+#               dplyr::select(read_id, forward_read_position, ID, shift_position)) %>%
+#   mutate(shift_position = case_when(ref_position != -1 & ref_position <= SV_start ~ ref_position,
+#                                     ref_position != -1 & ref_position > SV_start ~ ref_position+ SV_len,
+#                                     T ~ shift_position),
+#          shift_position = if_else(ref_position == -1 & ref_strand == "-", shift_position +SV_len, shift_position  ))
+# 
+# saveRDS(merged_DUP_reads, file = paste0( "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/", sample,"_DUP_meth.RDS"))
+
+```
+###SV DUP
+```{r}
+DUP_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_DUP_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "DUP")
+ 
+ 
+DUP_reads_h453 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_DUP_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "DUP")
+
+DUP_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_DUP_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_merged_SV_modkit_extract.tsv",
+                                      type = "DUP")
+```
+
+
+##DUP overlap concordance
+```{r}
+overlapped_DUP_pileup_filt <- isogenic_overlap_svs(DUP_reads_h453, DUP_reads_a630, type = "DUP")
+
+
+overlapped_DUP_pileup_filt%>%
+  ggplot(aes(x = `OVCAR8 LP A6-30`, y = `OVCAR8 LP H4-53`))+
+  geom_point(alpha = 0.2)+
+  stat_cor(label.y = c(1.05,1))+
+  facet_wrap(~read_type)+
+  theme_bw()+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  theme(strip.background = element_rect(fill = NA))
+ggsave("plots/dup_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
+
+isogenic_overlap_svs_venn(DUP_reads_h453, DUP_reads_a630, type = "DUP", "plots/dup_overlap_ovcar8s.tiff")
+```
+####SV DUP merge
+```{r}
+overlapped_DUP_reads <- DUP_reads_h453 %>%
+  dplyr::select(chrom, SV_start, SV_end_453 = SV_end, ID_h453 =ID, REF, SV_type, SV_len_h453 =SV_len ) %>%
+  distinct() %>%
+  full_join(DUP_reads_a630 %>%
+  dplyr::select(chrom, SV_start, SV_end_630 = SV_end, ID_a630 =ID, REF, SV_type, SV_len_a630 = SV_len )%>%
+    distinct())%>%
+  mutate(commonID = case_when(!is.na(ID_h453) &!is.na(ID_a630) ~ paste0(ID_h453, "_common"), 
+                                !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
+                                !is.na(ID_a630) ~ paste0(ID_a630, "_a630")),
+         commonend = pmax(SV_end_453 ,SV_end_630, na.rm = T),
+         commonSV_len = pmax(SV_len_h453 ,SV_len_a630 , na.rm = T ))
+
+merged_DUP <-rbind(DUP_reads_h453 %>% 
+                     left_join(overlapped_DUP_reads %>%
+                                 filter(!is.na(ID_h453)) %>%
+                                       dplyr::select(ID = ID_h453, commonID, commonend, commonSV_len)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end = commonend, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, SV_len= commonSV_len) %>%
+          mutate(Sample = "OVCAR8 LP H4-53"),
+      DUP_reads_a630 %>%
+        inner_join(overlapped_DUP_reads %>%
+                      filter(!is.na(ID_a630))  %>%
+                                       dplyr::select(ID = ID_a630, commonID, commonend, commonSV_len)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end = commonend, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, SV_len =commonSV_len )%>%
+          mutate(Sample = "OVCAR8 LP A6-30"))%>%
+  dplyr::select(ID, SV_start, SV_end, ref_position, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample, SV_len) %>%
+  distinct() %>%
+  rbind(DUP_reads_uwb1_brca1 %>%
+          mutate(Sample = if_else(read_type == "parent", "UWB1", "UWB1 BRCA1"),
+                 ID = paste0(ID, "_U")) %>%
+          dplyr::select(ID, SV_start, read_id, SV_end, ref_position, chrom, mod_strand, ref_strand, mod, read_type, Sample, SV_len)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position)) %>%
+  group_by(ID, SV_start, SV_end, ref_position, chrom,  read_type, SV_len) %>%
+  filter(n()>3) %>%
+  summarise(Meth = sum(mod == "Me"), read_cnts = n(),
+            Unmeth = read_cnts - Meth,
+            meth_perc = Meth/read_cnts) %>%
+  ungroup() 
+
+plot_DUP <- merged_DUP %>%
+  filter(read_type == "parent", (meth_perc >=0.8| meth_perc <= 0.2) ) %>%
+  dplyr::select(ref_position, chrom, p_meth_perc= meth_perc) %>%
+  distinct() %>%
+  inner_join(merged_DUP%>%
+              filter(read_type == "ref")) %>%
+  filter(abs(meth_perc - p_meth_perc) <=0.2) %>%
+  dplyr::select(ref_position, chrom, ID) %>%
+  distinct() %>%
+  inner_join(merged_DUP %>%
+              filter(read_type != "parent")) %>%
+  mutate(relat_pos = case_when(ref_position <= SV_start ~ ref_position -SV_start,
+                                ref_position > SV_start &ref_position < SV_end ~ (ref_position-SV_start)/SV_len *5000,
+                               ref_position >= SV_end ~ ref_position -SV_end +5000,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  distinct()%>%
+  group_by(SV_len, ID, ref_position) %>%
+  filter(n_distinct(read_type)==2) %>%
+  ungroup() %>%
+  drop_na() %>%
+  arrange(SV_len, ID, ref_position, read_type)
+
+
+CpG_DUP_fisher <- plot_DUP  %>%
+  dplyr::select(ID, ref_position,chrom, read_type, Meth, Unmeth, SV_len) %>%
+  pivot_wider(values_from = c(Meth, Unmeth),names_from = read_type)%>%
+  distinct() %>%
+  group_by(ID, ref_position, SV_len) %>%
+  rowwise() %>%
+  mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
+  mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
+  group_by(ID) %>%
+  mutate(fisher.adj = p.adjust(p.value),
+         sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
+  ungroup()  
+
+
+plot_DUP_density <- plot_DUP%>%
+  dplyr::select(-c(Meth, Unmeth, read_cnts)) %>%
+  pivot_wider(values_from = meth_perc, names_from = read_type) %>%
+  mutate(relat_pos = case_when(ref_position <= SV_start ~ ref_position -SV_start,
+                               ref_position > SV_start &ref_position < SV_end ~ (ref_position-SV_start)/SV_len *5000,
+                               ref_position >= SV_end ~ ref_position -SV_end +5000,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  mutate(diff = alt- ref) %>%
+  distinct() 
+
+
+plot_DUP_density$density <-get_density(plot_DUP_density$relat_pos, plot_DUP_density$diff, n =80)
+```
+####plot SV DUP MERGE
+```{r}
+
+plot_DUP_density%>%
+  inner_join(CpG_DUP_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = density))+
+  geom_point(alpha= 0.8,aes(shape = sig))+
+  theme_bw()+
+  scale_color_viridis_c( name = "density")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("DUP (SV)")+
+  coord_cartesian(xlim= c(-5000, 10000))+
+  scale_x_continuous(breaks = c(-5000, -2500, 0, 5000, 7500, 10000), labels = c("-5000", "-2500", "BP_1", "BP_2", "2500", "5000"))
+
+ggsave("plots/DUP_change.png", width = 8, height = 4,)
+unique(plot_DEL_density$ID)
+
+
+plot_DUP_density%>%
+  left_join(CpG_DUP_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = sig))+
+  geom_point(alpha= 0.8)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("DUP (SV)")+
+  coord_cartesian(xlim= c(-5000, 5500))+
+  scale_x_continuous(breaks = c(-5000, -2500, 0, 500, 3000, 5500), labels = c("-5000", "-2500", "BP_1", "BP_2", "2500", "5000"))+
+   scale_color_manual(values = c( "red","black"), "Sig diff & abs(diff) >= 0.8")+
+  facet_wrap(~ID)
+
+ggsave("plots/DUP_change_indv.pdf", width = 16, height = 14)
+```
+
+
+
+##isogenic sv extraction (BND)
+```{r collapse=T}
+# source("scripts/meth_sv/sv_extract_support.R")
+# sample = "uwb1_brca1"
+# 
+# sv_merged <- readRDS(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_sv_merged.RDS"))
+# 
+# read_mapping <- readRDS(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_read_mapping.RDS"))
+# 
+# BND <- sv_merged %>%
+#   filter(str_detect(ALT, "\\]")|str_detect(ALT, "\\[")) %>%
+#   arrange(ID) %>%
+#   mutate(chr_end = str_extract(ALT, "chr[0-9XYM]+"),
+#          SV_end =as.numeric(str_extract(ALT, "(?<=:)[0-9]+"))) %>%
+#   dplyr::select(ID, ALT, chr_start = `#CHROM`, SV_start, chr_end, SV_end, BND_type)
+# 
+# BND %>%
+#   left_join(read_mapping%>%
+#               dplyr::select(ID, read_id, read_type)) %>%
+#   filter(read_type == "alt") %>%
+#   pull(read_id) %>%
+#   unique(.)%>%
+#   write_lines(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/","bnd_read_name_saf_tag.tsv"))
+# 
+# modkit_extract <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample,"_merged_SV_modkit_extract.tsv")) %>%
+#   filter(mod_code == "m") %>%
+#   dplyr::select(read_id, forward_read_position, ref_position,chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual)
+# 
+# 
+# BND <- sv_merged %>%
+#   filter(str_detect(ALT, "\\]")|str_detect(ALT, "\\[")) %>%
+#   arrange(ID) %>%
+#   mutate(chr_end = str_extract(ALT, "chr[0-9XYM]+"),
+#          SV_end =as.numeric(str_extract(ALT, "(?<=:)[0-9]+"))) %>%
+#   dplyr::select(ID, ALT, chr_start = `#CHROM`, SV_start, chr_end, SV_end, BND_type)
+# 
+# bnd_primary_mapping <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/", "/bnd_read_name_primary_map.tsv"), col.names = c("read_id",  "flag", "rname", "pos", "cigar")) %>%
+#   mutate(strand = if_else(flag %in% c(16, 2064), "-", "+")) %>%
+#   rowwise() %>%
+#   mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+#   separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+#   mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+#          read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+#   dplyr::select(-pos, -flag)
+# 
+# 
+# bnd_saf_mapping <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/", "/bnd_read_name_saf_map.tsv"), col.names = c("read_id", "saf_tag")) %>%
+#   mutate(saf_tag = gsub("SA:Z:", "", saf_tag)) %>%
+#   separate_rows(saf_tag, sep = ";") %>%
+#   filter(saf_tag != "", str_detect(saf_tag, ",")) %>%
+#   separate(saf_tag, into = c("rname", "pos", "strand", "cigar", "MAPQ", "NM"), sep = ",") %>%
+#   rowwise() %>%
+#   mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+#   separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+#   mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+#          read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+#   dplyr::select(-c(pos, MAPQ, NM))%>%
+#   left_join(bnd_primary_mapping %>%
+#               dplyr::select(read_id, ref_start_primary = ref_start, ref_end_primary = ref_end, strand , rname),
+#             by= join_by(rname == rname, strand == strand, read_id == read_id, ref_start <=ref_end_primary, ref_end >= ref_start_primary)) %>%
+#   filter(is.na(ref_end_primary)) %>%
+#   dplyr::select(-ref_start_primary, -ref_end_primary)
+# 
+# 
+# BND_supporting_reads <- rbind(bnd_saf_mapping, bnd_primary_mapping) %>%
+#   left_join(modkit_extract %>%
+#               dplyr::select(read_id, forward_read_position, read_length, mod_qual, base_qual) %>%
+#               distinct(),
+#             by =join_by(read_id == read_id, read_start <= forward_read_position, read_end >= forward_read_position)) %>%
+#   dplyr::rename(chrom = rname, ref_strand = strand) %>%
+#   filter(!is.na(forward_read_position) ) %>%
+#   mutate(ref_start = if_else(ref_strand == "-", ref_end, ref_start))
+# 
+# BND_supporting_reads = setDT(BND_supporting_reads)
+# BND_supporting_reads[, ref_position := deduce_reference_position(cigar, ref_start, forward_read_position, ref_strand)]
+# 
+# BND_supporting_reads <-BND_supporting_reads %>%
+#   left_join(BND %>%
+#               left_join(read_mapping%>%
+#                           dplyr::select(ID, read_id, read_type) %>%
+#                           distinct(), relationship = "many-to-many")%>%
+#             filter(read_type == "alt") , by = join_by(read_id == read_id, chrom ==chr_start), relationship = "many-to-many") %>%
+#   filter(SV_start >= ref_start, ref_end >= SV_start) %>%
+#   dplyr::select(-c(cigar, ref_start, ref_end, read_start, read_end)) %>%
+#   distinct()
+# 
+# BND_ref_reads  <- modkit_extract %>%
+#   dplyr::select(chrom, read_id, ref_strand,ref_position, forward_read_position, read_length, mod_qual, base_qual) %>%
+#   distinct() %>%
+#   right_join(BND %>%
+#                left_join(read_mapping%>%
+#                            dplyr::select(ID, read_id, read_type) %>%
+#                            distinct()) %>%
+#                filter(read_type == "ref"), by = join_by(read_id == read_id, chrom ==chr_start))
+# 
+# saveRDS(BND_ref_reads, file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample, "_BND_ref_meth.RDS"))
+# saveRDS(BND_supporting_reads, file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/",sample, "_BND_alt_meth.RDS"))
+
+```
+
+###BND 
+```{r}
+BND_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_BND_alt_meth.RDS",
+                                       T_read_ref_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_BND_ref_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "BND")
+
+BND_reads_h453 <- match_savana_bp_meth(T_read_mapping_RDS ="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_BND_alt_meth.RDS",
+                                       T_read_ref_mapping_RDS ="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_BND_ref_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/h453_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_h453/ovcar8_merged_SV_modkit_extract.tsv",
+                                      type = "BND")
+
+BND_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_BND_alt_meth.RDS",
+                                              T_read_ref_mapping_RDS ="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_BND_ref_meth.RDS",
+                                      T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_brca1_merged_SV_modkit_extract.tsv",
+                                      N_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_uwb1_brca1/uwb1_merged_SV_modkit_extract.tsv",
+                                      type = "BND")
+
+
+```
+
+##BND overlap concordance
+```{r}
+overlapped_BND_pileup_filt <- isogenic_overlap_svs(BND_reads_h453, BND_reads_a630, type = "BND")
+
+overlapped_BND_pileup_filt%>%
+  ggplot(aes(x = `OVCAR8 LP A6-30`, y = `OVCAR8 LP H4-53`))+
+  geom_point(alpha = 0.2)+
+  stat_cor(label.y = c(1.05,1))+
+  facet_wrap(~read_type)+
+  theme_bw()+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  theme(strip.background = element_rect(fill = NA))
+ggsave("plots/bnd_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
+
+isogenic_overlap_svs_venn(BND_reads_h453, BND_reads_a630, type = "BND", "plots/bnd_overlap_ovcar8s.tiff")
+```
+####SV BND merge
+```{r}
+overlapped_BND_reads <- BND_reads_h453 %>%
+  dplyr::select(chrom, SV_start, SV_end, ID_h453 =ID,  SV_type, SV_len_h453 =SV_len, chr_end) %>%
+  distinct() %>%
+  full_join(BND_reads_a630 %>%
+  dplyr::select(chrom, SV_start, SV_end, ID_a630 =ID,  SV_type, SV_len_a630 = SV_len, chr_end)%>%
+    distinct())%>%
+  mutate(commonID = case_when(!is.na(ID_h453) &!is.na(ID_a630) ~ paste0(ID_h453, "_common"), 
+                                !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
+                                !is.na(ID_a630) ~ paste0(ID_a630, "_a630")))
+
+merged_BND <-rbind(BND_reads_h453 %>% 
+                     left_join(overlapped_BND_reads %>%
+                                 filter(!is.na(ID_h453)) %>%
+                                       dplyr::select(ID = ID_h453, commonID)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end, chr_end, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod) %>%
+          mutate(Sample = "OVCAR8 LP H4-53"),
+      BND_reads_a630 %>%
+        inner_join(overlapped_BND_reads %>%
+                      filter(!is.na(ID_a630))  %>%
+                                       dplyr::select(ID = ID_a630, commonID) %>%
+                     distinct()) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+        dplyr::select(ID, SV_start, SV_end, read_id, chr_end, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod)%>%
+          mutate(Sample = "OVCAR8 LP A6-30"))%>%
+  dplyr::select(ID, SV_start, SV_end, ref_position, chr_end, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample) %>%
+  distinct() %>%
+  rbind(BND_reads_uwb1_brca1 %>%
+          mutate(Sample = if_else(read_type == "parent", "UWB1", "UWB1 BRCA1"),
+                 ID = paste0(ID, "_U")) %>%
+          dplyr::select(ID, SV_start, read_id, SV_end, chr_end, ref_position, chrom, mod_strand, ref_strand, mod, read_type, Sample)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position)) %>%
+  group_by(ID, SV_start, chr_end, SV_end, ref_position, chrom,  read_type) %>%
+  filter(n()>3) %>%
+  summarise(Meth = sum(mod == "Me"), read_cnts = n(),
+            Unmeth = read_cnts - Meth,
+            meth_perc = Meth/read_cnts) %>%
+  ungroup() 
+
+
+plot_BND <- merged_BND %>%
+  filter(read_type == "parent", (meth_perc >=0.8| meth_perc <= 0.2) ) %>%
+  dplyr::select(ref_position, chrom, p_meth_perc= meth_perc) %>%
+  distinct() %>%
+  inner_join(merged_BND%>%
+              filter(read_type == "ref")) %>%
+  filter(abs(meth_perc - p_meth_perc) <=0.2) %>%
+  dplyr::select(ref_position, chrom, ID) %>%
+  distinct() %>%
+  inner_join(merged_BND %>%
+              filter(read_type != "parent")) %>%
+  mutate(relat_pos = case_when(abs(ref_position-SV_start) <= abs(ref_position-SV_end)~ abs(ref_position -SV_start),
+                               abs(ref_position-SV_start) >= abs(ref_position-SV_end) ~ abs(ref_position -SV_end),
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  distinct()%>%
+  group_by( ID, ref_position) %>%
+  filter(n_distinct(read_type)==2) %>%
+  ungroup() %>%
+  drop_na() %>%
+  arrange(ID, ref_position, read_type)
+
+
+CpG_BND_fisher <- plot_BND  %>%
+  dplyr::select(ID, SV_start, SV_end, chr_end, ref_position,chrom, read_type, Meth, Unmeth) %>%
+  distinct() %>%
+  group_by(ID, ref_position,chrom, read_type) %>%
+  pivot_wider(values_from = c(Meth, Unmeth),names_from = read_type)%>%
+  distinct() %>%
+  group_by(ID, ref_position) %>%
+  rowwise() %>%
+  mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
+  mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
+  group_by(ID) %>%
+  mutate(fisher.adj = p.adjust(p.value),
+         sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
+  ungroup()  
+
+
+plot_BND_density <- plot_BND%>%
+  dplyr::select(-SV_start, -SV_end, -chr_end) %>%
+  distinct() %>%
+  dplyr::select(-c(Meth, Unmeth, read_cnts)) %>%
+  pivot_wider(values_from = meth_perc, names_from = read_type) %>%
+  mutate(diff = alt- ref) %>%
+  distinct() 
+
+
+plot_BND_density$density <-get_density(plot_BND_density$relat_pos, plot_BND_density$diff, n =40)
+```
+####plot SV BND MERGE
+```{r}
+
+plot_BND_density%>%
+  inner_join(CpG_BND_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = density))+
+  geom_point(alpha= 0.8,aes(shape = sig))+
+  theme_bw()+
+  scale_color_viridis_c( name = "density")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("BND (SV)")+
+  coord_cartesian(xlim= c(0, 5000))
+
+ggsave("plots/BND_change.png", width = 8, height = 4)
+unique(plot_BND_density$ID)
+
+
+plot_BND_density%>%
+  left_join(CpG_BND_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = sig))+
+  geom_point(alpha= 0.8)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("BND (SV)")+
+  coord_cartesian(xlim= c(-5000, 5000))+
+   scale_color_manual(values = c( "red","black"), "Sig diff & abs(diff) >= 0.8")+
+  facet_wrap(~ID)
+
+ggsave("plots/BND_change_indv.pdf", width = 16, height = 14)
+```
+
+## isogenic INDEL extraction
+```{r}
+
+# #ovcar8
+# isogenic_indel_ovcar8 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/clairs_to/indel.vcf.gz", skip = '#CHROM', fill=TRUE) %>%
+#   filter(FILTER == "PASS")
+# 
+# isogenic_indel_ovcar8s <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8_LP_*/clairs_to/indel.vcf.gz") %>%
+#   map_dfr(~ fread(.x, skip = '#CHROM', fill=TRUE)%>%
+#             filter(FILTER == "PASS") %>%
+#             separate(starts_with("OVCAR8"), into =c("GT", "GQ", "DP", "AF", "AD"), sep = ":",extra =  "drop") %>%
+#             mutate(AF = as.numeric(AF)) %>%
+#             filter(AF >= 0.2) %>%
+#             dplyr::select(-c( "GQ", "DP", "AD", "AF"))%>%
+#             mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+"))) %>%
+#   left_join(isogenic_indel_ovcar8 %>%
+#               dplyr::select(`#CHROM`, POS, REF, ALT) %>%
+#               mutate(flag = "Parental")) %>%
+#   mutate(type = case_when(nchar(REF) >1 & nchar(ALT) >1 ~ "indel",
+#                           nchar(REF) >1~ "del",
+#                           nchar(ALT) >1  ~ "ins"),
+#          indel_size = abs(nchar(REF)- nchar(ALT)))  %>%
+#   filter(is.na(flag),GT == "0/1", indel_size <50,
+#          `#CHROM` %in% paste0("chr", seq(1, 22))) %>%
+#   mutate(ID = paste0(`#CHROM`,"_", POS,":", REF, "/", ALT))
+# 
+# 
+# isogenic_indel_ovcar8s_filt_adj <- isogenic_indel_ovcar8s  %>%
+#   mutate(indel_start_ext = POS-5000,
+#          indel_end_ext = if_else(type =="ins", POS+5000, POS+indel_size+5000) ) %>%
+#   left_join(isogenic_indel_ovcar8s %>%
+#               dplyr::select(`#CHROM`, POS_2 = POS, SampleID),
+#             by = join_by(`#CHROM` ==`#CHROM`, SampleID == SampleID, indel_start_ext <= POS_2, indel_end_ext >= POS_2)) %>%
+#   filter(POS != POS_2)
+# 
+# isogenic_indel_ovcar8s <- isogenic_indel_ovcar8s %>%
+#    filter(!ID %in% isogenic_indel_ovcar8s_filt_adj$ID)
+# 
+# 
+# #uwb1
+# isogenic_indel_uwb1 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/clairs_to/indel.vcf.gz", skip = '#CHROM', fill=TRUE) %>%
+#   filter(FILTER == "PASS")
+# 
+# isogenic_indel_uwb1_brca1 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1_BRCA1/clairs_to/indel.vcf.gz", skip = '#CHROM', fill=TRUE) %>%
+#             filter(FILTER == "PASS") %>%
+#             separate(starts_with("UWB1"), into =c("GT", "GQ", "DP", "AF", "AD"), sep = ":",extra =  "drop") %>%
+#             mutate(AF = as.numeric(AF)) %>%
+#             filter(AF >= 0.2) %>%
+#             dplyr::select(-c( "GQ", "DP", "AD", "AF"))%>%
+#             mutate(SampleID = "UWB1_BRCA1") %>%
+#   left_join(isogenic_indel_uwb1 %>%
+#               dplyr::select(`#CHROM`, POS, REF, ALT) %>%
+#               mutate(flag = "Parental")) %>%
+#   mutate(type = case_when(nchar(REF) >1 & nchar(ALT) >1 ~ "indel",
+#                           nchar(REF) >1~ "del",
+#                           nchar(ALT) >1  ~ "ins"),
+#          indel_size = abs(nchar(REF)- nchar(ALT)))  %>%
+#   filter(is.na(flag),GT == "0/1", indel_size <50,
+#          `#CHROM` %in% paste0("chr", seq(1, 22))) %>%
+#   mutate(ID = paste0(`#CHROM`,"_", POS,":", REF, "/", ALT))
+# 
+# isogenic_indel_uwb1_brca1_filt_adj <- isogenic_indel_uwb1_brca1  %>%
+#   mutate(indel_start_ext = POS-5000,
+#          indel_end_ext = if_else(type =="ins", POS+5000, POS+indel_size+5000) ) %>%
+#   left_join(isogenic_indel_uwb1_brca1 %>%
+#               dplyr::select(`#CHROM`, POS_2 = POS, SampleID),
+#             by = join_by(`#CHROM` ==`#CHROM`, SampleID == SampleID, indel_start_ext <= POS_2, indel_end_ext >= POS_2)) %>%
+#   filter(POS != POS_2)
+# 
+# isogenic_indel_uwb1_brca1 <- isogenic_indel_uwb1_brca1 %>%
+#    filter(!ID %in% isogenic_indel_uwb1_brca1_filt_adj$ID)
+
+# library(rtracklayer)
+# pileup_read_id_grange_a630<- isogenic_indel_ovcar8s %>%
+#   filter(SampleID == "OVCAR8_LP_A6_30") %>%
+#     mutate(start = POS -1,end = POS+1) %>%
+#     dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+#   distinct() %>%
+#   makeGRangesFromDataFrame(.)
+# rtracklayer::export.bed(pileup_read_id_grange_a630, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_a630_merged_indel.bed"))
+# 
+# pileup_read_id_grange_h453<- isogenic_indel_ovcar8s %>%
+#   filter(SampleID == "OVCAR8_LP_H4_53") %>%
+#     mutate(start = POS -1, end = POS+1) %>%
+#     dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+#   distinct() %>%
+#   makeGRangesFromDataFrame(.)
+# 
+# rtracklayer::export.bed(pileup_read_id_grange_h453, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_h453_merged_indel.bed"))
+# 
+# pileup_read_id_grange_ovcar8<- isogenic_indel_ovcar8s %>%
+#   dplyr::select(`#CHROM`, POS) %>%
+#   distinct() %>%
+#     mutate(start = POS -1, end = POS+1) %>%
+#     dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+#   distinct() %>%
+#   makeGRangesFromDataFrame(.)
+# 
+# rtracklayer::export.bed(pileup_read_id_grange_ovcar8, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_ovcar8_merged_indel.bed"))
+# 
+# pileup_read_id_grange_uwb1_brca1 <- isogenic_indel_uwb1_brca1 %>%
+#     mutate(start = POS -1, end = POS+1) %>%
+#     dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+#   distinct() %>%
+#   makeGRangesFromDataFrame(.)
+# 
+# rtracklayer::export.bed(pileup_read_id_grange_uwb1_brca1, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_uwb1_brca1_merged_indel.bed"))
+
+
+# #deletion read_mapping
+# del_ovcar8s_seq <- isogenic_indel_ovcar8s %>%
+#   filter(type == "del") %>%
+#   mutate(start = POS, end = POS+ nchar(REF)) %>%
+#   group_by(`#CHROM`, start, end, SampleID) %>%
+#   group_map(~  detect_indels_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+#                       param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+#                                                   what = c("qname", "seq"))),
+#                       unique(.y$start),
+#                       unique(.y$end),
+#                       unique(.y$SampleID)))
+# 
+# del_ovcars_seq_df <- do.call(rbind, del_ovcar8s_seq)
+# 
+# del_ovcars_seq_df  <- del_ovcars_seq_df %>%
+#   dplyr::select(read_id, read_alt_type, POS = region_start, IndelStart, IndelLength, SampleID) %>%
+#   left_join(isogenic_indel_ovcar8s %>%
+#               filter(type == "del")) %>%
+#   mutate(read_type = case_when(abs(indel_size - IndelLength) <  IndelLength*0.1 & read_alt_type == "Deletion" ~"ALT", 
+#                                 read_alt_type == "Match" ~"REF",
+#                                 TRUE ~"FAIL"))
+# 
+# saveRDS(del_ovcars_seq_df%>%
+#           filter(SampleID == "OVCAR8_LP_A6_30"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_a630_seq_df.RDS")
+# saveRDS(del_ovcars_seq_df%>%
+#           filter(SampleID == "OVCAR8_LP_H4_53"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_h453_seq_df.RDS")
+# 
+# ins_ovcar8s_seq <- isogenic_indel_ovcar8s %>%
+#   filter(type == "ins") %>%
+#   mutate(start = POS, end = POS+ nchar(REF)) %>%
+#   group_by(`#CHROM`, start, end, SampleID) %>%
+#   group_map(~  detect_indels_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+#                       param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+#                                                   what = c("qname", "seq"))),
+#                       unique(.y$start),
+#                       unique(.y$end),
+#                       unique(.y$SampleID)))
+# 
+# ins_ovcars_seq_df <- do.call(rbind, ins_ovcar8s_seq)
+# 
+# ins_ovcars_seq_df  <- ins_ovcars_seq_df %>%
+#   dplyr::select(read_id, read_alt_type, POS = region_start, IndelStart, IndelLength, SampleID) %>%
+#   left_join(isogenic_indel_ovcar8s %>%
+#               filter(type == "ins")) %>%
+#   mutate(read_type = case_when(abs(indel_size - IndelLength) <  IndelLength*0.1 & read_alt_type == "Insertion" ~ "ALT", 
+#                                read_alt_type == "Match" ~"REF",
+#                                 TRUE ~"FAIL"))
+# 
+# saveRDS(ins_ovcars_seq_df %>%
+#           filter(SampleID == "OVCAR8_LP_A6_30"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_a630_seq_df.RDS")
+# saveRDS(ins_ovcars_seq_df %>%
+#           filter(SampleID == "OVCAR8_LP_H4_53"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_h453_seq_df.RDS")
+# 
+# del_uwb1_brca1_seq <- isogenic_indel_uwb1_brca1 %>%
+#   filter(type == "del") %>%
+#   mutate(start = POS, end = POS+ nchar(REF)) %>%
+#   group_by(`#CHROM`, start, end, SampleID) %>%
+#   group_map(~  detect_indels_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+#                       param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+#                                                   what = c("qname", "seq"))),
+#                       unique(.y$start),
+#                       unique(.y$end),
+#                       unique(.y$SampleID)))
+# 
+# del_uwb1_brca1_seq_df <- do.call(rbind, del_uwb1_brca1_seq)
+# 
+# del_uwb1_brca1_seq_df  <- del_uwb1_brca1_seq_df %>%
+#   dplyr::select(read_id, read_alt_type, POS = region_start, IndelStart, IndelLength, SampleID) %>%
+#   left_join(isogenic_indel_uwb1_brca1 %>%
+#               filter(type == "del")) %>%
+#   mutate(read_type = case_when(abs(indel_size - IndelLength) <  IndelLength*0.1 & read_alt_type == "Deletion" ~"ALT", 
+#                                 read_alt_type == "Match" ~"REF",
+#                                 TRUE ~"FAIL"))
+# 
+# saveRDS(del_uwb1_brca1_seq_df, "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/del_uwb1_brca1_seq_df.RDS")
+# 
+# ins_uwb1_brca1_seq <- isogenic_indel_uwb1_brca1 %>%
+#   filter(type == "ins") %>%
+#   mutate(start = POS, end = POS+ nchar(REF)) %>%
+#   group_by(`#CHROM`, start, end, SampleID) %>%
+#   group_map(~  detect_indels_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+#                       param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+#                                                   what = c("qname", "seq"))),
+#                       unique(.y$start),
+#                       unique(.y$end),
+#                       unique(.y$SampleID)))
+# 
+# ins_uwb1_brca1_seq_df <- do.call(rbind, ins_uwb1_brca1_seq)
+# 
+# ins_uwb1_brca1_seq_df  <- ins_uwb1_brca1_seq_df %>%
+#   dplyr::select(read_id, read_alt_type, POS = region_start, IndelStart, IndelLength, SampleID) %>%
+#   left_join(isogenic_indel_uwb1_brca1 %>%
+#               filter(type == "ins")) %>%
+#   mutate(read_type = case_when(abs(indel_size - IndelLength) <  IndelLength*0.1 & read_alt_type == "Insertion" ~ "ALT", 
+#                                read_alt_type == "Match" ~"REF",
+#                                 TRUE ~"FAIL"))
+# saveRDS(ins_uwb1_brca1_seq_df, "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_uwb1_brca1_seq_df.RDS")
+
+```
+### INDEL DEL 
+```{r}
+indel_del_a630 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_a630_seq_df.RDS",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_LP_A6_30_merged_SV_modkit_extract.tsv",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_merged_SV_modkit_extract.tsv")
+
+indel_del_h453 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_h453_seq_df.RDS",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_LP_H4_53_merged_SV_modkit_extract.tsv",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_merged_SV_modkit_extract.tsv")
+
+indel_del_uwb1_brca1 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_uwb1_brca1_seq_df.RDS",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/UWB1_BRCA1_merged_SV_modkit_extract.tsv",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/UWB1_merged_SV_modkit_extract.tsv")
+
+
+overlapped_indel_DEL_pileup_filt<- isogenic_overlap_svs(indel_del_h453 %>%
+                                  dplyr::rename(SV_start = start, SV_end = end,  SV_len = indel_size, SV_type = type),
+                     indel_del_a630 %>%
+                                  dplyr::rename(SV_start = start, SV_end = end,  SV_len = indel_size, SV_type = type), "DEL")
+overlapped_DEL_pileup_filt%>%
+  ggplot(aes(x = `OVCAR8 LP A6-30`, y = `OVCAR8 LP H4-53`))+
+  geom_point(alpha = 0.2)+
+  stat_cor(label.y = c(1.05,1))+
+  facet_wrap(~read_type)+
+  theme_bw()+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  theme(strip.background = element_rect(fill = NA))
+ggsave("plots/indel_del_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
+
+isogenic_overlap_indels_venn(indel_del_h453 ,
+                     indel_del_a630 , type = "DEL", "plots/indel_del_overlap_ovcar8s.tiff")
+```
+
+####indel DEL merge
+```{r}
+overlapped_indel_del_reads <- indel_del_h453 %>%
+  dplyr::select(chrom, start, end, ID_h453 =ID, REF, ALT, type, indel_size ) %>%
+  distinct() %>%
+  full_join(indel_del_a630 %>%
+  dplyr::select(chrom, start, end, ID_a630 =ID, REF, ALT, type, indel_size)%>%
+    distinct())%>%
+  mutate(commonID = case_when(!is.na(ID_h453) &!is.na(ID_a630) ~ paste0(ID_h453, "_common"), 
+                                !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
+                                !is.na(ID_a630) ~ paste0(ID_a630, "_a630")))
+
+merged_indel_del <-rbind(indel_del_h453 %>%
+                                 left_join(overlapped_indel_del_reads %>%
+                                       filter(!is.na(ID_h453)) %>%
+                                       dplyr::select(ID = ID_h453, commonID)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+                           dplyr::select(ID, start, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, indel_size, end) %>%
+                           mutate(Sample = "OVCAR8 LP H4-53"),
+                   indel_del_a630 %>%
+                           right_join(overlapped_indel_del_reads %>%
+                                        filter(!is.na(ID_a630)) %>%
+                                        dplyr::select(ID = ID_a630, commonID)) %>%
+                           dplyr::select(-ID)%>%
+                     dplyr::rename(ID = commonID)%>%
+                           dplyr::select(ID, start, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, indel_size, end)%>%
+                           mutate(Sample = "OVCAR8 LP A6-30"))%>%
+  dplyr::select(ID, start, end, ref_position, indel_size, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample) %>%
+  distinct() %>%
+  rbind(indel_del_uwb1_brca1 %>%
+          mutate(Sample = if_else(read_type == "parent", "UWB1", "UWB1 BRCA1"),
+                 ID = paste0(ID, "_U")) %>%
+          dplyr::select(ID, start, end, ref_position, indel_size, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position)) %>%
+  group_by(ID, start, end, ref_position, chrom,  read_type, indel_size) %>%
+  filter(n()>3) %>%
+  summarise(Meth = sum(mod == "Me"), read_cnts = n(),
+            Unmeth = read_cnts - Meth,
+            meth_perc = Meth/read_cnts) %>%
+  ungroup() 
+
+plot_indel_del <- merged_indel_del  %>%
+  filter(read_type == "parent", (meth_perc >=0.8| meth_perc <= 0.2) ) %>%
+  dplyr::select(ref_position, chrom, p_meth_perc= meth_perc, indel_size) %>%
+  distinct() %>%
+  inner_join(merged_indel_del%>%
+              filter(read_type == "ref")) %>%
+  filter(abs(meth_perc - p_meth_perc) <=0.2) %>%
+  dplyr::select(ref_position, chrom, ID, indel_size) %>%
+  distinct() %>%
+  inner_join(merged_indel_del %>%
+              filter(read_type != "parent")) %>%
+  mutate(relat_pos = case_when(ref_position <= start ~ ref_position -start,
+                               ref_position >= end ~ ref_position -end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  distinct()%>%
+  group_by(indel_size, ID, ref_position) %>%
+  filter(n_distinct(read_type)==2) %>%
+  ungroup() %>%
+  drop_na() %>%
+  arrange(indel_size, ID, ref_position, read_type)
+
+
+CpG_indel_del_fisher <- plot_indel_del  %>%
+  dplyr::select(ID, ref_position,chrom, read_type, Meth, Unmeth, indel_size) %>%
+  pivot_wider(values_from = c(Meth, Unmeth),names_from = read_type)%>%
+  distinct() %>%
+  group_by(ID, ref_position, indel_size) %>%
+  rowwise() %>%
+  mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
+  mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
+  group_by(ID) %>%
+  mutate(fisher.adj = p.adjust(p.value),
+         sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
+  ungroup()  
+
+
+plot_indel_del_density <- plot_indel_del%>%
+  dplyr::select(-c(Meth, Unmeth, read_cnts)) %>%
+  pivot_wider(values_from = meth_perc, names_from = read_type) %>%
+  mutate(relat_pos = case_when(ref_position <= start ~ ref_position -start,
+                               ref_position >= end ~ ref_position -end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  mutate(diff = alt- ref) %>%
+  distinct() 
+
+plot_indel_del_density$density <-get_density(plot_indel_del_density$relat_pos, plot_indel_del_density$diff, n =80)
+
+```
+
+####plot indel del merge 
+```{r}
+plot_indel_del_density%>%
+  left_join(CpG_indel_del_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = density))+
+  geom_point(alpha= 0.8,aes(shape = sig))+
+  theme_bw()+
+  scale_color_viridis_c( name = "density")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("DEL (INDEL)")+
+  coord_cartesian(xlim= c(-5000, 5000))
+
+ggsave("plots/indel_del_change.png", width = 8, height = 4)
+```
+
+### INDEL INS
+```{r}
+indel_ins_a630 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_a630_seq_df.RDS",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_LP_A6_30_merged_SV_modkit_extract.tsv",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_merged_SV_modkit_extract.tsv")
+
+indel_ins_h453 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_h453_seq_df.RDS",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_LP_H4_53_merged_SV_modkit_extract.tsv",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_merged_SV_modkit_extract.tsv")
+
+indel_ins_uwb1_brca1 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_uwb1_brca1_seq_df.RDS",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/UWB1_BRCA1_merged_SV_modkit_extract.tsv",
+                  "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/UWB1_merged_SV_modkit_extract.tsv")
+
+
+overlapped_INS_pileup_filt<- isogenic_overlap_svs(indel_ins_h453 %>%
+                                  dplyr::rename(SV_start = start, SV_end = end,  SV_len = indel_size, SV_type = type),
+                     indel_ins_a630 %>%
+                                  dplyr::rename(SV_start = start, SV_end = end,  SV_len = indel_size, SV_type = type), "INS")
+overlapped_INS_pileup_filt%>%
+  ggplot(aes(x = `OVCAR8 LP A6-30`, y = `OVCAR8 LP H4-53`))+
+  geom_point(alpha = 0.2)+
+  stat_cor(label.y = c(1.05,1))+
+  facet_wrap(~read_type)+
+  theme_bw()+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  theme(strip.background = element_rect(fill = NA))
+ggsave("plots/indel_ins_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
+
+isogenic_overlap_indels_venn(indel_ins_h453 ,
+                     indel_ins_a630 , type = "INS", "plots/indel_ins_overlap_ovcar8s.tiff")
+```
+
+####indel INS merge
+```{r}
+overlapped_indel_ins_reads <- indel_ins_h453 %>%
+  dplyr::select(chrom, start, end, ID_h453 =ID, REF, ALT, type, indel_size ) %>%
+  distinct() %>%
+  full_join(indel_ins_a630 %>%
+  dplyr::select(chrom, start, end, ID_a630 =ID, REF, ALT, type, indel_size)%>%
+    distinct())%>%
+  mutate(commonID = case_when(!is.na(ID_h453) &!is.na(ID_a630) ~ paste0(ID_h453, "_common"), 
+                                !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
+                                !is.na(ID_a630) ~ paste0(ID_a630, "_a630")))
+
+merged_indel_ins <-rbind(indel_ins_h453 %>%
+                                 left_join(overlapped_indel_ins_reads %>%
+                                       filter(!is.na(ID_h453)) %>%
+                                       dplyr::select(ID = ID_h453, commonID)) %>%
+                           dplyr::select(-ID) %>%
+                           dplyr::rename(ID = commonID)%>%
+                           dplyr::select(ID, start, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, indel_size, end) %>%
+                           mutate(Sample = "OVCAR8 LP H4-53"),
+                   indel_ins_a630 %>%
+                           right_join(overlapped_indel_ins_reads %>%
+                                        filter(!is.na(ID_a630)) %>%
+                                        dplyr::select(ID = ID_a630, commonID)) %>%
+                           dplyr::select(-ID)%>%
+                     dplyr::rename(ID = commonID)%>%
+                           dplyr::select(ID, start, read_id, read_type, forward_read_position, ref_position, chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual, mod, indel_size, end)%>%
+                           mutate(Sample = "OVCAR8 LP A6-30"))%>%
+  dplyr::select(ID, start, end, ref_position, indel_size, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample) %>%
+  distinct() %>%
+  rbind(indel_ins_uwb1_brca1 %>%
+          mutate(Sample = if_else(read_type == "parent", "UWB1", "UWB1 BRCA1"),
+                 ID = paste0(ID, "_U")) %>%
+          dplyr::select(ID, start, end, ref_position, indel_size, read_id, chrom, mod_strand, ref_strand, mod, read_type, Sample)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position)) %>%
+  group_by(ID, start, end, ref_position, chrom,  read_type, indel_size) %>%
+  filter(n()>3) %>%
+  summarise(Meth = sum(mod == "Me"), read_cnts = n(),
+            Unmeth = read_cnts - Meth,
+            meth_perc = Meth/read_cnts) %>%
+  ungroup() 
+
+plot_indel_ins <- merged_indel_ins  %>%
+  filter(read_type == "parent", (meth_perc >=0.8| meth_perc <= 0.2) ) %>%
+  dplyr::select(ref_position, chrom, p_meth_perc= meth_perc, indel_size) %>%
+  distinct() %>%
+  inner_join(merged_indel_ins%>%
+              filter(read_type == "ref")) %>%
+  filter(abs(meth_perc - p_meth_perc) <=0.2) %>%
+  dplyr::select(ref_position, chrom, ID, indel_size) %>%
+  distinct() %>%
+  inner_join(merged_indel_ins %>%
+              filter(read_type != "parent")) %>%
+  mutate(relat_pos = case_when(ref_position <= start ~ ref_position -start,
+                               ref_position >= end ~ ref_position -end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  distinct()%>%
+  group_by(indel_size, ID, ref_position) %>%
+  filter(n_distinct(read_type)==2) %>%
+  ungroup() %>%
+  drop_na() %>%
+  arrange(indel_size, ID, ref_position, read_type)
+
+
+CpG_indel_ins_fisher <- plot_indel_ins  %>%
+  dplyr::select(ID, ref_position,chrom, read_type, Meth, Unmeth, indel_size) %>%
+  pivot_wider(values_from = c(Meth, Unmeth),names_from = read_type)%>%
+  distinct() %>%
+  group_by(ID, ref_position, indel_size) %>%
+  rowwise() %>%
+  mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
+  mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
+  group_by(ID) %>%
+  mutate(fisher.adj = p.adjust(p.value),
+         sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
+  ungroup()  
+
+plot_indel_ins_density <- plot_indel_ins%>%
+  dplyr::select(-c(Meth, Unmeth, read_cnts)) %>%
+  pivot_wider(values_from = meth_perc, names_from = read_type) %>%
+  mutate(relat_pos = case_when(ref_position <= start ~ ref_position -start,
+                               ref_position >= end ~ ref_position -end,
+                               TRUE ~NA)) %>%
+  filter(!is.na(relat_pos))%>%
+  mutate(diff = alt- ref) %>%
+  distinct() 
+
+plot_indel_ins_density$density <-get_density(plot_indel_ins_density$relat_pos, plot_indel_ins_density$diff, n =60)
+```
+####plot indel del merge 
+```{r}
+plot_indel_ins_density%>%
+  left_join(CpG_indel_ins_fisher) %>%
+  mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = relat_pos, y = diff, color = density))+
+  geom_point(alpha= 0.8,aes(shape = sig))+
+  theme_bw()+
+  scale_color_viridis_c( name = "density")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
+  xlab("Relative distance to breakpoint (bp)")+
+  ggtitle("INS (INDEL)")+
+  coord_cartesian(xlim= c(-5000, 5000))
+
+ggsave("plots/indel_ins_change.png", width = 8, height = 4)
+```
+
+#altered size assessment
+```{r}
+rbind(CpG_indel_del_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "INDEL"),
+      CpG_DEL_fisher%>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")) %>%
+  mutate(Group = "Deletion",
+         Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample))  %>%
+  group_by(ID, alt_len, Group, type, Sample) %>%
+  summarise(changed = sum(sig)>0) %>%
+  ungroup() %>%
+  group_by(type, Sample, changed) %>%
+  summarise(count = n()) %>%
+  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = type, fill = changed, y = count))+
+  geom_bar(stat = "identity", position = "fill")+
+  geom_text(aes(label = paste0("N= ", count)),
+             position=  position_fill(vjust = 0.5))+
+  facet_wrap(~Sample, ncol = 4)+
+  theme_bw()+
+  xlab("Deletion Type")+
+  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Proportion")+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
+
+ggsave("plots/breakdown_Deletion_type.pdf", width = 10, height =4)
+
+rbind(CpG_indel_ins_fisher %>%
+         dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "INDEL"),
+      CpG_INS_fisher%>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")) %>%
+  mutate(Group = "Deletion",
+         Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8",
+                           str_detect(ID, "_h453$") ~"OVCAR8",
+                           str_detect(ID, "_common$") ~"OVCAR8"),
+         Sample = factor(Sample))  %>%
+  group_by(ID, alt_len, Group, type, Sample) %>%
+  summarise(changed = sum(sig)>0) %>%
+  ungroup() %>%
+  group_by(type, Sample, changed) %>%
+  summarise(count = n()) %>%
+  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = type, fill = changed, y = count))+
+  geom_bar(stat = "identity", position = "fill")+
+  geom_text(aes(label = paste0("N= ", count)),
+             position=  position_fill(vjust = 0.5))+
+  facet_wrap(~Sample, ncol = 4)+
+  theme_bw()+
+  xlab("Insertion Type")+
+  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Proportion")+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
+
+ggsave("plots/breakdown_Insertion_type.pdf", width = 10, height =4)
+
+
+CpG_DUP_fisher%>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")%>%
+  mutate(Group = "Duplication",
+         Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample))  %>%
+  group_by(ID, alt_len, Group, type, Sample) %>%
+  summarise(changed = sum(sig)>0) %>%
+  ungroup() %>%
+  group_by(type, Sample, changed) %>%
+  summarise(count = n()) %>%
+  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = type, fill = changed, y = count))+
+  geom_bar(stat = "identity", position = "fill")+
+  geom_text(aes(label = paste0("N= ", count)),
+             position=  position_fill(vjust = 0.5))+
+  facet_wrap(~Sample, ncol = 4)+
+  theme_bw()+
+  xlab("Duplication")+
+  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Proportion")+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())+
+  ggtitle("Duplication")
+
+ggsave("plots/breakdown_duplication_type.pdf", width = 7, height =4)
+
+
+
+CpG_BND_fisher%>%
+        mutate(type = "SV")%>%
+  mutate(Group = "Translocation",
+         Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample))  %>%
+  group_by(ID,  Group, type, Sample) %>%
+  summarise(changed = sum(sig)>0) %>%
+  ungroup() %>%
+  group_by(type, Sample, changed) %>%
+  summarise(count = n()) %>%
+  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = type, fill = changed, y = count))+
+  geom_bar(stat = "identity", position = "fill")+
+  geom_text(aes(label = paste0("N= ", count)),
+             position=  position_fill(vjust = 0.5))+
+  facet_wrap(~Sample, ncol = 4)+
+  theme_bw()+
+  xlab("Duplication")+
+  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Proportion")+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())+
+  ggtitle("Translocation")
+
+ggsave("plots/breakdown_translocation_type.pdf", width = 7, height =4)
+
+del_len <- rbind(CpG_indel_del_fisher %>%
+        dplyr::rename(alt_len = indel_size),
+      CpG_DEL_fisher%>%
+        dplyr::rename(alt_len = SV_len)) %>%
+  mutate(Group = "Deletion") %>%
+  rbind(rbind(CpG_indel_ins_fisher %>%
+        dplyr::rename(alt_len = indel_size),
+        CpG_INS_fisher%>%
+        dplyr::rename(alt_len = SV_len)) %>%
+          mutate(Group = "Insertion")) %>%
+  mutate(Group = factor(Group)) %>%
+  group_by(ID, alt_len, Group) %>%
+  summarise(n = sum(sig)>0) %>%
+  mutate(Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample)) 
+
+
+del_len %>%
+  filter(Group == "Deletion") %>%
+  mutate(n = factor(n, levels = c("TRUE", "FALSE")),
+         Sample = factor(Sample, levels = c("OVCAR8 common", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53", "UWB1 BRCA1"))) %>%
+  ggplot(aes(x = n, y = alt_len, color = n))+
+  geom_violin()+
+  facet_wrap(~Sample, ncol = 4)+
+  scale_color_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               width = 0.1)+
+  stat_compare_means(comparisons = list(c("TRUE", "FALSE")))+
+  scale_y_log10("Length of deletion (bp)")+
+  theme_bw()+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
+ggsave("plots/breakdown_Deletion_length.pdf", width = 10, height =4)
+
+del_len %>%
+  filter(Group == "Insertion") %>%
+  mutate(n = factor(n, levels = c("TRUE", "FALSE")),
+         Sample = factor(Sample, levels = c("OVCAR8 common", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53", "UWB1 BRCA1"))) %>%
+  ggplot(aes(x = n, y = alt_len, color = n))+
+  geom_beeswarm()+
+  facet_wrap(~Sample, ncol = 4)+
+  scale_color_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
+  stat_compare_means(comparisons = list(c("TRUE", "FALSE")))+
+  scale_y_log10("Length of Insertion (bp)")+
+  theme_bw()+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
+ggsave("plots/breakdown_Insertion_length.pdf", width = 10, height =4)
+
+CpG_DUP_fisher%>%
+        dplyr::rename(alt_len = SV_len)%>%
+          mutate(Group = "Insertion") %>%
+  mutate(Group = factor(Group)) %>%
+  group_by(ID, alt_len, Group) %>%
+  summarise(n = sum(sig)>0) %>%
+  mutate(Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample)) %>%
+  mutate(n = factor(n, levels = c("TRUE", "FALSE")),
+         Sample = factor(Sample, levels = c("OVCAR8 common", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53", "UWB1 BRCA1"))) %>%
+  ggplot(aes(x = n, y = alt_len, color = n))+
+  geom_beeswarm()+
+  facet_wrap(~Sample, ncol = 4)+
+  scale_color_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
+  stat_compare_means(comparisons = list(c("TRUE", "FALSE")))+
+  scale_y_log10("Length of Duplication (bp)")+
+  theme_bw()+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
+ggsave("plots/breakdown_Duplication_length.pdf", width = 10, height =4)
+
+
+# 
+# 
+# model <- glm(n ~ alt_len , data = del_len, family = binomial(link = "logit"))
+# summary(model)
+# 
+# 
+# new_data <- expand.grid(alt_len = seq(min(del_len$alt_len),
+#                                               max(del_len$alt_len),
+#                                               length.out= 100),
+#                         Sample = levels(del_len$Sample),
+#                         Group = levels(del_len$Group)
+#                         )
+# 
+# new_data$prob <- predict(model, newdata = new_data, type = "response")
+# 
+# 
+# 
+# 
+# new_data %>%
+# ggplot(aes(x = alt_len, y = prob, color = Sample))+
+#   geom_line(linewidth =1 )+
+#   facet_wrap(~Group)+theme_bw()+
+#   scale_color_manual(values = c("OVCAR8" = "#BBC36B"),
+#                      "Cell-line")+
+#   theme(legend.position = "bottom",
+#         strip.background = element_rect(fill = NA))+
+#   xlab("Alteration Size (bp)")+
+#   ylab("Probably of Significant Change")
+# ggsave("plots/logisticreg_changed_size.pdf", height = 4, width = 10)
+
+```
+##CpG density 
+```{r}
+
+isl_annot <- fread("ref/cpg_islands_ucsc.bed") %>%
+  dplyr::select(chrom, chromStart, chromEnd) 
+
+isl_complete <- isl_annot %>%
+  mutate(type = "Island")  %>%
+  rbind(., isl_annot %>%mutate(chromEnd = chromStart, chromStart = chromStart - 2000,, type = "Shore")) %>%
+  rbind(., isl_annot %>%mutate(chromStart = chromEnd, chromEnd = chromEnd + 2000,, type = "Shore")) %>%
+  rbind(., isl_annot %>%mutate(chromEnd = chromStart- 2000, chromStart = chromStart - 4000,, type = "Shelf")) %>%
+  rbind(., isl_annot %>%mutate(chromStart = chromEnd+2000, chromEnd = chromEnd + 4000,, type = "Shelf"))
+CpG_sites <-c(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/*_modkit_extract.tsv"),Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/*/*_merged_SV_modkit_extract.tsv")) %>%
+  map_dfr(~fread(.x) %>%
+            dplyr::select(chrom, ref_position, ref_strand)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position )) %>%
+  distinct()
+  
+
+
+### motif investigation
+```{r}
+changed_dist_sv_del <-CpG_DEL_fisher%>%
+  filter(!(sig &diff >0)) %>%
+  group_by(ID) %>%
+  mutate(changed = sum(sig)>0) %>%
+  inner_join(plot_DEL %>%
+               dplyr::select(SV_start, SV_end, ID, chrom, SV_len,relat_pos, ref_position) %>%
+               distinct()) %>%
+  group_by(ID, chrom, SV_start, SV_end, SV_len) %>%
+  mutate(side = if_else(relat_pos >0, "downstream of BP", "upstream of BP")) %>%
+  group_by(ID) %>%
+  filter(sum(sig) ==0 | sig) %>%
+  ungroup()%>%
+  group_by(SV_start, SV_end, ID, chrom, SV_len, side, changed) %>%
+  filter(abs(relat_pos ) == min(abs(relat_pos)) )  %>%
+  dplyr::select(ID, changed, side, relat_pos, SV_start,SV_end) %>%
+  distinct() %>%
+  pivot_wider(names_from = "side", values_from = "relat_pos") %>%
+  mutate( mid_point = (SV_start+SV_end)/2)
+
+
+changed_dist_indel_del <-CpG_indel_del_fisher%>%
+  filter(!(sig &diff >0)) %>%
+  group_by(ID) %>%
+  mutate(changed = sum(sig)>0) %>%
+  inner_join(plot_indel_del %>%
+               dplyr::select(start, end, ID, chrom, indel_size,relat_pos, ref_position) %>%
+               distinct()) %>%
+  group_by(ID, chrom, start, end, indel_size) %>%
+  mutate(side = if_else(relat_pos >0, "downstream of BP", "upstream of BP")) %>%
+  group_by(ID) %>%
+  filter(sum(sig) ==0 | sig) %>%
+  ungroup()%>%
+  group_by(start, end, ID, chrom, indel_size, side, changed) %>%
+  filter(abs(relat_pos ) == min(abs(relat_pos)) )  %>%
+  dplyr::select(ID, changed, side, relat_pos, start,end) %>%
+  distinct() %>%
+  pivot_wider(names_from = "side", values_from = "relat_pos") %>%
+  mutate( mid_point = (start+end)/2) %>%
+  dplyr::rename(SV_start = start, SV_end = end , SV_len = indel_size) %>%
+  mutate(ID = paste0("indel_",ID))
+
+
+DEL_seq <- changed_dist_sv_del %>% 
+  filter(SV_len+40 <= 5000) %>%
+  mutate(start = SV_start - 20, end = SV_end +20) %>%
+  rbind(changed_dist_indel_del%>%
+  mutate(start = SV_start - 20, end = SV_end +20) ) %>%
+  rbind(changed_dist_sv_del %>% 
+          filter(SV_len+40 > 5000,SV_len+40 <= 10000 ) %>%
+          mutate(start = SV_start - 20, end = mid_point,
+                 ID = paste0(ID,"_u"))) %>%
+  rbind(changed_dist_sv_del %>% 
+          filter(SV_len+40 > 5000,SV_len+40 <= 10000 ) %>%
+          mutate(start = mid_point+1, end = SV_end+20,
+                 ID = paste0(ID,"_d"))) %>%
+  rbind(changed_dist_sv_del %>% 
+          filter(SV_len+40 > 10000 ) %>%
+          mutate(start = SV_start - 20, end = SV_start-20 +5000,
+                 ID = paste0(ID,"_u"))) %>%
+  rbind(changed_dist_sv_del %>% 
+          filter(SV_len+40 > 10000 ) %>%
+          mutate(start = SV_end +20 - 5000, end = SV_end +20,
+                 ID = paste0(ID,"_d")))%>%
+  mutate(range = list(GRanges(chrom, IRanges(start, end))))
+
+
+pileup_params <- PileupParam(
+    distinguish_nucleotides = TRUE,
+    distinguish_strands = FALSE,
+    min_base_quality = 20,
+    min_mapq = 20
+)
+
+
+
+pileup_data <- c(lapply(DEL_seq%>%
+                       filter(changed,
+                              (str_detect(ID, "_h453")|str_detect(ID, "_a630")) ) %>%
+                       pull(range), function(x) pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam",
+                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bai",
+                      scanBamParam = ScanBamParam(which = x),
+                      pileupParam = pileup_params )),
+                   lapply(DEL_seq%>%
+                       filter(changed,
+                              str_detect(ID, "_U")) %>%
+                       pull(range), function(x) pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/UWB1_mapped_sc.bam",
+                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/UWB1_mapped_sc.bai",
+                      scanBamParam = ScanBamParam(which = x),
+                      pileupParam = pileup_params )))
+
+pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam",
+                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bai",
+                      scanBamParam = ScanBamParam(which = GRanges("chr11", IRanges(35698475, 35703475))),
+                      pileupParam = pileup_params )
+consensus <- lapply(pileup_data, function(x) x%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <- c(DEL_seq %>% filter(changed,
+                              (str_detect(ID, "_h453")|str_detect(ID, "_a630"))) %>%pull(ID),
+                          DEL_seq%>%
+                       filter(changed, str_detect(ID, "_U"))%>%pull(ID))
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_loss_sequences.fasta")
+
+pileup_data <-c(lapply(DEL_seq%>%
+                       filter(!changed,  (str_detect(ID, "_h453")|str_detect(ID, "_a630"))) %>%
+                       pull(range), function(x) pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam",
+                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bai",
+                      scanBamParam = ScanBamParam(which = x),
+                      pileupParam = pileup_params )),
+                lapply(DEL_seq%>%
+                       filter(!changed,
+                              str_detect(ID, "_U")) %>%
+                       pull(range), function(x) pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/UWB1_mapped_sc.bam",
+                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/UWB1_mapped_sc.bai",
+                      scanBamParam = ScanBamParam(which = x),
+                      pileupParam = pileup_params )))
+
+consensus <- lapply(pileup_data, function(x) x%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <-c(DEL_seq %>% filter(!changed,
+                              (str_detect(ID, "_h453")|str_detect(ID, "_a630"))) %>%pull(ID),
+                          DEL_seq%>%
+                       filter(!changed, str_detect(ID, "_U"))%>%pull(ID))
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_ref_sequences.fasta")
+
+motif_pos <-Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/meme_out/position_motif_*.txt") %>%
+  map_dfr(~fread(.x, fill =T, skip = "severus") %>%
+            mutate(motif = gsub("position_motif_|.txt$", "", basename(.x)))) %>%
+  mutate(motif_width = nchar(V5)) %>%
+  dplyr::select(ID = V1, motif_start = V2, motif_name = motif, motif_width) %>%
+  mutate(motif_name_plot = case_when(motif_name == "1" ~"Motif 2",
+                                     motif_name == "2" ~"Motif 4",
+                                     motif_name == "3" ~"Motif 3",
+                                     motif_name == "4" ~"Motif 6",
+                                     motif_name == "5" ~"Motif 7",
+                                     motif_name == "6" ~"Motif 1",
+                                     motif_name == "7" ~"Motif 5",)) %>%
+  dplyr::select(-motif_name) %>%
+  dplyr::rename(`motif name` = motif_name_plot)
+
+motif_dist <- DEL_seq %>%
+  filter(changed) %>%
+  inner_join(motif_pos) %>%
+  mutate(SV_len = abs(SV_end - SV_start),
+         motif_start_relat = (start + motif_start-SV_start)/SV_len, motif_end_relat = (start + motif_start-SV_start +motif_width)/SV_len)%>%
+  filter(motif_start_relat>=0, motif_start_relat <= 1) %>%
+  mutate(ID = gsub("_u|_d", "", ID))
+
+motif_dist %>%
+  group_by(changed) %>%
+  summarise(n = n_distinct(ID))
+
+motif_dist%>%
+  ggplot(aes(x = motif_start_relat,  y = ID,  color = `motif name`))+
+  geom_point(shape =3)+
+  theme_bw()+
+  theme(legend.position = "bottom",
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())+
+  ylab("SV DEL Event") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("DEL start", "DEL end"), name = "Relative Position within SV DEL")+
+  scale_color_manual(values= c("Motif 1"="#ff7480","Motif 2"="#fbb040", "Motif 3"="#fcec52", "Motif 4"="#99ca3c", "Motif 5"="#2bdae6",
+                               "Motif 6"="#08b2f5","Motif 7"="#8178ff"))
+ggsave("plots/del_changed_motif_distribution.pdf", width = 8, height = 3.5)
+
+LT = list("Motif 1" = motif_dist%>% filter(`motif name` == "Motif 1") %>% pull(ID) %>%unique(),
+          "Motif 2" = motif_dist%>% filter(`motif name` == "Motif 2") %>% pull(ID) %>%unique(),
+          "Motif 3" = motif_dist%>% filter(`motif name` == "Motif 3") %>% pull(ID) %>%unique(),
+          "Motif 4" = motif_dist%>% filter(`motif name` == "Motif 4") %>% pull(ID) %>%unique(),
+          "Motif 5" = motif_dist%>% filter(`motif name` == "Motif 5") %>% pull(ID) %>%unique(),
+          "Motif 6" = motif_dist%>% filter(`motif name` == "Motif 6") %>% pull(ID) %>%unique(),
+          "Motif 7" = motif_dist%>% filter(`motif name` == "Motif 7") %>% pull(ID) %>%unique())
+
+
+m <- make_comb_mat(LT)
+pdf("plots/del_changed_motif_upset.pdf", width = 8, height =4)
+UpSet(m)
+dev.off()
+
+```
+
+

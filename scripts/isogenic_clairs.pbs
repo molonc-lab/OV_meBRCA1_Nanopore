@@ -1,0 +1,40 @@
+#PBS -r n
+#PBS -l mem=64GB,walltime=30:00:00,ncpus=16
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+
+module load python/3.9.13
+module load singularity/3.7.1
+module load samtools/1.20
+module load conda-envs/whatshap-2.3
+module load longphase
+
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/indexes/MINIMAP2/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+source ~/.proxy
+
+singularity exec \
+/working/genomeinfo/share/containers/singularity/clairs-v0.4.1.sif \
+/opt/bin/run_clairs \
+-P /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/clairs_models/ont_r10_dorado_sup_4khz/pileup.pkl \
+-F /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/clairs_models/ont_r10_dorado_sup_4khz/full_alignment.pkl \
+--indel_full_alignment_model_path /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/clairs_models/ont_r10_dorado_sup_4khz/indel/full_alignment.pkl \
+--indel_pileup_model_path /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/clairs_models/ont_r10_dorado_sup_4khz/indel/pileup.pkl \
+--ref_fn $reference_fa \
+--clair3_path /working/genomeinfo/share/containers/singularity/clair3-v1.0.4.sif \
+--clair3_model_path /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/clair3_models/r1041_e82_400bps_sup_v500 \
+--threads 16 \
+--longphase /software/longphase/longphase-1.4/bin \
+--haplotagged_tumor_bam_provided_so_skip_intermediate_phasing_and_haplotagging \
+--platform ont_r10_dorado_sup_4khz \
+--normal_bam_fn /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam \
+--tumor_bam_fn /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8_LP_A6_30/clair3/phased_output.bam \
+-s OVCAR8_LP_A6_30 \
+--output_dir /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clairs_a630
+#-s OVCAR8_LP_H4_53 \
+#--tumor_bam_fn /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8_LP_H4_53/clair3/phased_output.bam \
+#--output_dir /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clairs_h453
+#--normal_bam_fn /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/UWB1_mapped_sc.bam \
+#-s UWB1_BRCA1 \
+#--tumor_bam_fn /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1_BRCA1/clair3/phased_output.bam \
+#--output_dir /working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clairs_uwb1
+

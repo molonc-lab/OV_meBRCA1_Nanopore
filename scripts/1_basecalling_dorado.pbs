@@ -13,7 +13,7 @@ module load samtools/1.17
 mkdir -p "${wk_dir}/output/${SampleID}"
 mkdir -p "${wk_dir}/output/${SampleID}/QC"
 
-pod5_files="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/data/${SampleID}/POD5/"
+pod5_files="${wk_dir}/data/${SampleID}/POD5/"
 reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/primary_files/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
 dorado="/mnt/backedup/home/lijunX/local/dorado-0.7.1-linux-x64/bin/dorado"
 

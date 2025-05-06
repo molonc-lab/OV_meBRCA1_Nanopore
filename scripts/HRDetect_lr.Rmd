@@ -184,14 +184,16 @@ process.file<-function(svData,sampleName) {
                                 distance >=10000 & distance < 100000 ~"10kb-100kb",
                                 distance >=100000 & distance < 1000000 ~ "100kb-1mb",
                                 distance >=1000000 & distance < 10000000 ~"1mb-10mb",
-                                distance >=10000000 ~ ">10mb"),
-         `#CHROM` = case_when(`#CHROM` == "chrX" ~ 23,
+                                distance >=10000000 ~ ">10mb")) %>%
+    filter(CHR_end %in% c(paste0("chr", c(seq(1,22), "X", "Y")))) %>%
+    mutate( `#CHROM` = case_when(`#CHROM` == "chrX" ~ 23,
                               `#CHROM` == "chrY" ~ 24,
                               TRUE ~ as.numeric(gsub("chr", "", `#CHROM`))),
          CHR_end = case_when(CHR_end == "chrX" ~ 23,
                               CHR_end == "chrY" ~ 24,
                               TRUE ~ as.numeric(gsub("chr", "", CHR_end)))) %>%
-  filter(length_cat != "remove", !(SV_type == "BND"& `#CHROM` == CHR_end)) %>%
+    filter(!is.na(`#CHROM`) , !is.na(`CHR_end`), length_cat != "remove")%>%
+  #filter(length_cat != "remove", !(SV_type == "BND"& `#CHROM` == CHR_end)) %>%
   dplyr::select(chr_from = `#CHROM`, chr_from_bkpt = POS, sv_id = ID, annotation = SV_type, length_cat,
                 chr_to = CHR_end, chr_to_bkpt = POS_end)
 
@@ -460,6 +462,7 @@ subtypes.vec<-c("deletion:clustered:1kb-10kb","deletion:clustered:10kb-100kb","d
             mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+")))
   RE <- SV %>%
   group_by(SampleID) %>%
+    summarise(n=n())
   group_map(~process.file(.x, .y$SampleID), .keep = T)
   
   allcounts.df <- allcounts.df %>%
@@ -505,11 +508,12 @@ sv_sigs_assigned <- sv_sigs_raw %>%
   ungroup() %>%
   dplyr::select(-Total_count, -count_raw)
 
+write.table(sv_sigs_assigned, "../output/scarHRD/RearrangmentSignature.tsv",quote = F, row.names = F, sep = "\t")
 
 ```
 
 
-Run scarHRD to get HRD scores from ascat CN:
+Run scarHRD to get HRD scores from savana CN:
 
 ```{r scarHRD, message = FALSE}
 ploidy <-  c(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/LUNG_bam/output/*/savana/*_ranked_solutions.tsv"),

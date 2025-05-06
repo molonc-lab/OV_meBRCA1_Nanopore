@@ -1,0 +1,1442 @@
+---
+title: "extract_SV"
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+#| include: false
+# library(signal)
+library("data.table")
+library("ggplot2")
+library(tidyfast)
+library(dplyr)
+library(tidyverse)
+library(Rsamtools)
+library(GenomicRanges)
+library(tune)
+library(stringi)
+library(ggpubr)
+source("scripts/meth_sv/sv_extract_support.R")
+
+sky_color <- c("chr1" = "#FEFD32",
+               "chr2" = "#DD676B",
+               "chr3" = "#E1D7E4",
+               "chr4" = "#1AFCFF",
+               "chr5" = "#F98516",
+               "chr6" = "#A955D0",
+               "chr7" = "#FFCCD2",
+               "chr8" = "#FBAB32",
+               "chr9" = "#EDFEED",
+               "chr10" = "#9FE62C",
+               "chr11" = "#01D4F9",
+               "chr12" = "#FD36FA",
+               "chr13" = "#FC2905",
+               "chr14" = "#FF94B9",
+               "chr15" = "#ADECCA",
+               "chr16" = "#FFCB26",
+               "chr17" = "#009DF1",
+               "chr18" = "#F52D9C",
+               "chr19" = "#96FC9A",
+               "chr20" = "#0A58FC",
+               "chr21" = "#E5FDA3",
+               "chr22" = "#FEBDFD")
+
+hrd_palette= c("HRD" ="#CC79A7" , "HRR" = "#009E73")
+HRR_list <- list("SFRC01428S1_22235_T2", "134048_7794_T2", "SFRC01495S2_1537_T1", "OVCAR8", "SOLACE2_0126S1_25285_T2", "134169_6606_T2", "UWB1_BRCA1")
+```
+
+#LOH info (predict original methylation status)
+
+```{r}
+LOH_bed <- Sys.glob("output/*/wakhan/*_1.0_*/bed_output/loh_regions.bed")%>%
+  map_dfr(~ fread(.x, skip ="chr1", header =F, col.names = c("chr", "loh_start", "loh_end")) %>%
+            mutate(SampleID = str_extract(.x, "(?<=output/)[^/]+")))
+
+CN_bed <-  Sys.glob("output/*/wakhan/*_1.0_*/bed_output/*copynumbers_segments.bed") %>%
+  map_dfr(~ fread(.x, skip ="chr1", header =F, col.names = c("chr", "start", "end", "coverage", "copynumber_state", "haplotype")) %>%
+            mutate(SampleID = str_extract(.x, "(?<=output/)[^/]+"))) %>%
+  dplyr::select(-coverage) %>%
+  distinct() %>%
+  dt_pivot_wider(names_from = haplotype, values_from = copynumber_state) %>%
+  dplyr::rename(haplo_1 = "1", haplo_2 = "2")
+  
+
+CN_LOH <- CN_bed %>%
+  full_join(LOH_bed, by = join_by("chr"== "chr", "SampleID"== "SampleID", "start" >= "loh_start", "end" <= "loh_end")) %>%
+  mutate(loh = if_else(is.na(loh_start), 0, 1),
+        cn = haplo_1 + haplo_2) %>%
+  dplyr::select(-loh_start, -loh_end)
+
+```
+
+# load from RDS
+
+## INS
+
+```{r}
+# INS_reads <- Sys.glob("output/*/*_INS_meth.RDS") %>%
+#   map_dfr( ~ readRDS(.x) %>%
+#              mutate(SampleID= gsub("_INS_meth.RDS", "", basename(.x))) %>%
+#   mutate(mod = case_when(mod_qual >= 0.6 ~ 1,
+#                          mod_qual <= 0.4 ~ 0,
+#                          T ~ NA)) %>%
+#   filter(base_qual >=20, !is.na(mod), abs(SV_start -ref_position) <=2000 | ref_position == -1, !is.na(shift_position)) %>%
+#   group_by(SampleID, ID, read_type, shift_position) %>%
+#   filter(n()>2) %>%
+#   ungroup() %>%
+#   group_by(SampleID, ID, read_type) %>%
+#   filter(n_distinct(shift_position)>2,
+#          n_distinct(read_id)>2) %>%
+#   ungroup() %>%
+#   group_by(SampleID, ID) %>%
+#   filter(n_distinct(read_type)== 2) %>%
+#   ungroup())
+
+# saveRDS(INS_reads, "output/total_ins_meth.RDS")
+
+INS_reads <- readRDS("output/total_ins_meth.RDS")
+  
+INS_reads %>%
+  filter(ID == "i_1316", SampleID == "OVCAR8") %>%
+  ggplot(aes(x = shift_position, y = read_id))+
+  geom_rect(aes(xmin = SV_start, xmax =SV_end+SV_len, ymin = -Inf, ymax = Inf ), fill = alpha("grey", 0.01))+
+   geom_point(shape = 22, color = "black", aes(fill = mod))+
+  
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+       axis.text.y = element_blank())+
+  facet_wrap(~read_type, nrow = 2, scales = "free_y")
+```
+
+## DEL
+
+```{r}
+# DEL_reads <- Sys.glob("output/*/*_DEL_meth.RDS") %>%
+#   map_dfr( ~ readRDS(.x) %>%
+#              mutate(SampleID= gsub("_DEL_meth.RDS", "", basename(.x))) %>%
+#   mutate(mod = case_when(mod_qual >= 0.6 ~ 1,
+#                          mod_qual <= 0.4 ~ 0,
+#                          T ~ NA)) %>%
+#   filter(base_qual >=20, !is.na(mod),  ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
+#   group_by(ID, read_type) %>%
+#   filter(n()>2) %>%
+#   ungroup() %>%
+#   group_by(ID, read_type) %>%
+#   filter(n_distinct(read_id)>2) %>%
+#   ungroup() %>%
+#   group_by(ID) %>%
+#   filter(n_distinct(read_type)== 2) %>%
+#   ungroup())
+
+# saveRDS(DEL_reads, "output/total_del_meth.RDS")
+
+DEL_reads <- readRDS("output/total_del_meth.RDS")
+
+diff_id <- DEL_reads %>%
+  group_by(ID, read_type) %>%
+  summarise(mod_mean = mean(mod)) %>%
+  pivot_wider(names_from = read_type, values_from = mod_mean) %>%
+  filter(abs(alt-ref) > 0.3) %>%
+  pull(ID)
+DEL_reads %>%
+  filter(ID =="d_2212", ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
+  ggplot(aes(x = ref_position, y = read_id))+
+  geom_rect(aes(xmin = SV_start, xmax =SV_end, ymin = -Inf, ymax = Inf ), fill = alpha("grey", 0.01))+
+   geom_point(shape = 22, color = "black", aes(fill = mod))+
+  
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank())+
+  facet_wrap(~ID+read_type,scales = "free_x")
+
+DEL_change <- DEL_reads %>%
+  mutate(shifted_position =case_when(ref_position > SV_start & ref_position < SV_end &read_type == "alt" ~ (ref_position - SV_start)/abs(SV_len)*2000,
+                                     ref_position <= SV_start ~ ref_position- SV_start,
+                                     ref_position >= SV_end ~ ref_position - SV_end + 2000)) %>%
+  group_by(SampleID, ID, shifted_position, read_type) %>%
+  summarise(mod_avg = mean(mod, na.rm =T)) %>%
+  ungroup() %>%
+  dt_pivot_wider(values_from = mod_avg, names_from = read_type) %>%
+  dplyr::filter(!is.na(alt), !is.na(ref)) %>%
+  mutate(change = if_else(is.na(ref), alt, alt-ref),
+         HRD = if_else(SampleID %in% HRR_list, "HRR", "HRD")) 
+
+
+DEL_change %>%
+  group_by(SampleID, HRD) %>%
+  summarise(event_n = n_distinct(ID)) %>%
+  ungroup() %>%
+  ggplot(aes(x = SampleID, y = event_n, fill = HRD))+
+  geom_bar(stat = "identity")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        legend.position = "bottom")+
+ facet_wrap( ~HRD,scales = "free_x" )+
+  ylab("# Het Deletion (> 20bps)")+
+  scale_fill_manual(values = hrd_palette)
+
+require(ggridges)
+
+DEL_reads%>%
+  select(SampleID, SV_len, ID) %>%
+  mutate(HRD = if_else(SampleID %in% HRR_list, "HRR", "HRD")) %>%
+  distinct() %>%
+  ggplot(aes(x = -SV_len, y = SampleID, fill = HRD))+
+  geom_density_ridges()+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        legend.position = "bottom")+
+  scale_x_continuous(trans='log10')+
+  facet_wrap(~HRD, scales = "free_y")+
+  scale_fill_manual(values = hrd_palette)
+
+DEL_change %>%
+  ggplot(aes(x = shifted_position, y = change))+
+  geom_bin2d(bins = 60)+
+  scale_fill_continuous(type = "viridis",
+                        trans = scales::log10_trans(), breaks = 10^seq(0,6), 
+                        labels = 10^seq(0,6))+
+   theme_bw()+
+  ylab("alt-ref")+
+  facet_wrap(~HRD+SampleID)
+
+
+# testing small region
+
+DEL_change %>%
+  group_by(ID, SampleID) %>%
+  ggplot(aes(x = shifted_position, y = change))+
+  geom_point(aes(group = ID), size =0.4, alpha = 0.2)+
+  ylab("alt-ref")+
+   theme_bw()+
+  facet_wrap(~HRD +SampleID)
+
+
+# DEL_change %>%
+#   group_by(shifted_position, SampleID, HRD) %>%
+#   mutate(med = median(change,na.rm =T),
+#             var = var(change,na.rm =T)) %>%
+#   ungroup() %>%
+#   group_by(SampleID, ID) %>%
+#   dplyr::filter(n()>5) %>%
+#   arrange(shifted_position) %>%
+#   mutate(change_smooth = stats::filter(change,window_filter,sides = 2,method = "convolution")) %>%
+#   ungroup() %>%
+#   dplyr::filter(shifted_position >= 2000 | shifted_position <=0)%>%
+#   ggplot()+
+#   geom_line(aes(group = ID, x = shifted_position, y = change_smooth), linewidth = 0.5, alpha = 0.2,
+#             data = . %>%  dplyr::filter(shifted_position >= 2000))+
+#   geom_line(aes(group = ID, x = shifted_position, y = change_smooth), linewidth = 0.5, alpha = 0.2,
+#             data = . %>%  dplyr::filter(shifted_position <= 0))+
+#    theme_bw()+
+#   facet_wrap(~HRD)+
+#   scale_y_continuous(limits = c(-1, 1), name = "alt-ref")
+
+
+DEL_change %>%
+  group_by(shifted_position, SampleID, HRD) %>%
+  mutate(avg = mean(change,na.rm =T),
+            sd = sd(change,na.rm =T)) %>%
+  ungroup() %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0)%>%
+  mutate(upper = avg + sd, lower = avg - sd) %>%
+  ggplot(aes(x = shifted_position))+
+  geom_point(aes(y = change),  alpha = 0.2, size = 0.3)+
+  geom_hline(yintercept = 0, linetype = 2)+
+   theme_bw()+
+  facet_wrap(~HRD, nrow =2)+
+  scale_y_continuous(limits = c(-1, 1), name = "alt-ref")
+
+
+
+pvalue  <-DEL_change %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0, !is.na(ref), !is.na(alt)) %>%
+  mutate(bin = floor(shifted_position/100) ) %>%
+  group_by(SampleID, ID,bin, HRD ) %>%
+  mutate(direction = mean(alt) - mean(ref)) %>%
+  group_by(SampleID, ID,bin, HRD , direction) %>%
+  dplyr::filter(n()>3) %>%
+  group_modify(~ broom::tidy(wilcox.test(x = unlist(.x$alt), y = unlist(.x$ref), exact = F, paired = T)), .keep = T)
+
+
+pvalue %>%
+  ungroup() %>%
+  mutate(direction = if_else(direction >=0, "+", "-"),
+         direction = factor(direction, levels = c("+","-"))) %>%
+  group_by(SampleID, bin, HRD) %>%
+  mutate(total_n = n()) %>%
+  ungroup() %>%
+  group_by(SampleID, bin, HRD, direction) %>%
+  summarise(changed = sum(p.value <= 0.05,na.rm = T)/ total_n) %>%
+  ungroup() %>%
+  mutate(position = if_else(bin <= 0, "L", "R"))  %>%
+  distinct() %>%
+  ggplot(aes(x = bin, y = changed, fill = direction))+
+  geom_bar(position = "stack", stat = "identity")+
+  scale_y_continuous(name = "% w sig change", labels = scales::percent)+
+  facet_wrap(~HRD+ SampleID)+
+  theme_bw()
+
+
+pvalue %>%
+  ungroup() %>%
+  mutate(direction = if_else(direction >=0, "+", "-"),
+         direction = factor(direction, levels = c("+","-"))) %>%
+  group_by(SampleID, bin, HRD) %>%
+  mutate(total_n = n()) %>%
+  ungroup() %>%
+  group_by(SampleID, bin, HRD, direction) %>%
+  summarise(changed = sum(p.value <= 0.05,na.rm = T)) %>%
+  ungroup() %>%
+  mutate(position = if_else(bin <= 0, "L", "R"))  %>%
+  distinct() %>%
+  ggplot(aes(x = bin, y = changed, fill = direction))+
+  geom_bar(position = "stack", stat = "identity")+
+  scale_y_continuous(name = "% w sig change")+
+  facet_wrap(~HRD+ SampleID)+
+  theme_bw()
+
+
+sig_p <- pvalue %>%
+  dplyr::filter(p.value <= 0.05 ) %>%
+  mutate(change_type = "sig") %>%
+  right_join(DEL_change %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0, !is.na(ref), !is.na(alt)) %>%
+  mutate(bin = floor(shifted_position/100) ) %>%
+  group_by(SampleID, ID,bin, HRD ) %>%
+  mutate(direction = mean(alt) - mean(ref)) %>%
+  group_by(SampleID, ID,bin, HRD , direction) %>%
+  dplyr::filter(n()>3) %>%
+  ungroup()%>%
+  dplyr::select(SampleID, ID,bin, HRD , direction)) %>%
+  distinct() %>%
+    left_join(DEL_reads %>%
+               dplyr::select(SampleID, ID, SV_len) %>%
+               distinct())  %>%
+  mutate(change_type = if_else(is.na(change_type), "ns", change_type),
+         direction = if_else(direction >=0, "+", "-"),
+         direction = factor(direction, levels = c("+","-")))
+  
+
+sig_p %>%
+  dplyr::filter(bin<=0 | bin >= 20) %>%
+  ggplot(aes(x = bin , y = -SV_len, group = bin))+
+  geom_boxplot()+
+  scale_y_log10() +
+  facet_wrap(~change_type+direction)
+
+
+  
+```
+
+### cn loh
+
+```{r}
+DEL_loh <- DEL_reads %>%
+  dplyr::select(ID, SV_start, `#CHROM`, SV_end, SampleID, SV_len) %>%
+  distinct() %>%
+  left_join(CN_LOH %>%
+              dplyr::select(-haplo_1, -haplo_2), by = join_by(`#CHROM` == chr, SV_end >= start, SV_start <= end, SampleID == SampleID)) %>%
+  group_by(ID,`#CHROM`, SV_start, SV_end, SampleID, start, end) %>%
+  mutate(seg = (max(end, SV_end) - min(start, SV_start) -abs(start - SV_start) - abs(end - SV_end))/abs(SV_len)) %>%
+  ungroup() %>%
+  group_by(ID,`#CHROM`, SV_start, SV_end, SampleID) %>%
+  summarise(loh = sum(loh *seg),
+            cn = sum(cn* seg)) %>%
+  ungroup()
+
+sig_p %>%
+  left_join(DEL_loh %>%
+              dplyr::select(SampleID, ID, loh, cn)) %>%
+  ggplot(aes(x = change_type , fill = loh, group = loh))+
+  geom_bar(stat = "count", position = "fill")
+  # facet_wrap(~SampleID+HRD)
+
+
+DEL_change %>%
+  left_join(DEL_loh %>%
+              dplyr::select(SampleID, ID, loh, cn)) %>%
+  mutate(loh = as.character(round(loh, 0 ))) %>%
+  group_by(shifted_position, SampleID, HRD) %>%
+  mutate(avg = mean(change,na.rm =T),
+            sd = sd(change,na.rm =T)) %>%
+  ungroup() %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0)%>%
+  mutate(upper = avg + sd, lower = avg - sd) %>%
+  ggplot(aes(x = shifted_position, color = loh))+
+  geom_point(aes(y = change),  alpha = 0.2, size = 0.3)+
+  geom_hline(yintercept = 0, linetype = 2)+
+   theme_bw()+
+  facet_wrap(~loh, nrow =2)+
+  scale_y_continuous(limits = c(-1, 1), name = "alt-ref")
+
+
+DEL_change %>%
+  left_join(DEL_loh %>%
+              dplyr::select(SampleID, ID, loh, cn)) %>%
+  mutate(loh = as.character(round(loh, 0 )),
+         cn = paste0("CN=", as.character(round(cn, 0))),
+         cn = factor(cn, level = paste0("CN=", as.character(seq(0,20))))) %>%
+  group_by(shifted_position, SampleID, HRD) %>%
+  mutate(avg = mean(change,na.rm =T),
+            sd = sd(change,na.rm =T)) %>%
+  ungroup() %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0)%>%
+  mutate(upper = avg + sd, lower = avg - sd) %>%
+  ggplot(aes(x = shifted_position, color = loh))+
+  geom_point(aes(y = change),  alpha = 0.2, size = 0.3)+
+  geom_hline(yintercept = 0, linetype = 2)+
+   theme_bw()+
+  facet_wrap(~cn)+
+  scale_y_continuous(limits = c(-1, 1), name = "alt-ref")
+
+
+
+DEL_change %>%
+  left_join(DEL_loh %>%
+              dplyr::select(SampleID, ID, loh, cn)) %>%
+  mutate(loh = as.character(round(loh, 0 )),
+         cn = paste0("CN=", as.character(round(cn, 0))),
+         cn = factor(cn, level = paste0("CN=", as.character(seq(0,20))))) %>%
+  group_by(shifted_position, SampleID, HRD) %>%
+  mutate(avg = mean(change,na.rm =T),
+            sd = sd(change,na.rm =T)) %>%
+  ungroup() %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0)%>%
+  mutate(upper = avg + sd, lower = avg - sd,
+         shifted_position_dir = if_else(shifted_position <= 0, "U", "D")) %>%
+  filter(abs(change)> 0.5) %>%
+  group_by(SampleID) %>%
+  group_map(~
+  ggplot(data = .x, aes(x =change))+
+  geom_histogram(aes(fill= shifted_position_dir), alpha = 0.5, position = "identity")+
+  facet_wrap(~cn, scales = "free_y")+
+  theme_bw(), .keep = T)
+
+
+library(ggridges)
+
+DEL_change %>%
+  left_join(DEL_loh %>%
+              dplyr::select(SampleID, ID, loh, cn)) %>%
+  mutate(loh = as.character(round(loh, 0 )),
+         cn = paste0("CN=", as.character(round(cn, 0))),
+         cn = factor(cn, level = paste0("CN=", as.character(seq(0,20))))) %>%
+  group_by(shifted_position, SampleID, HRD) %>%
+  mutate(avg = mean(change,na.rm =T),
+            sd = sd(change,na.rm =T)) %>%
+  ungroup() %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0)%>%
+  mutate(upper = avg + sd, lower = avg - sd,
+         shifted_position_dir = if_else(shifted_position <= 0, "U", "D"),
+        shifted_position_dir = factor(shifted_position_dir , level = c("U", "D")) ) %>%
+  # filter(abs(change)>= 0.5) %>%
+  ggplot(aes(x =change,))+
+  geom_histogram(aes(fill= shifted_position_dir), alpha = 0.5, position = "identity", color= "black")+
+  # geom_density_ridges(stat = "binline", bins = 50, scale = 0.95, draw_baseline = FALSE)+
+  # facet_wrap(~cn, scales = "free_y")+
+  theme_bw()+
+  coord_cartesian(ylim = c(0, 2000))
+  
+
+DEL_change %>%
+  left_join(DEL_loh %>%
+              dplyr::select(SampleID, ID, loh, cn)) %>%
+  mutate(loh = as.character(round(loh, 0 )),
+         cn = paste0("CN=", as.character(round(cn, 0))),
+         cn = factor(cn, level = paste0("CN=", as.character(seq(0,20))))) %>%
+  group_by(shifted_position, SampleID, HRD) %>%
+  mutate(avg = mean(change,na.rm =T),
+            sd = sd(change,na.rm =T)) %>%
+  ungroup() %>%
+  dplyr::filter(shifted_position >= 2000 | shifted_position <=0)%>%
+  mutate(upper = avg + sd, lower = avg - sd,
+         shifted_position_dir = if_else(shifted_position <= 0, "U", "D"),
+        shifted_position_dir = factor(shifted_position_dir , level = c("U", "D")) ) %>%
+  group_by(SampleID, ID) %>%
+  summarise(sig_prop= sum(abs(change) >= 0.75))%>%
+  ungroup() %>%
+  ggplot(aes(x = sig_prop ))+
+  geom_histogram(bins = 50)
+```
+
+## BND
+
+```{r}
+# alt_BND_reads <- Sys.glob("output/*/*_BND_alt_meth.RDS") %>%
+#   map_dfr( ~ readRDS(.x) %>%
+#              mutate(SampleID= gsub("_BND_alt_meth.RDS", "", basename(.x)),
+#                     mod = case_when(mod_qual >= 0.65 ~ 1,
+#                          mod_qual <= 0.3 ~ 0,
+#                          T ~ NA)) %>%
+#               filter(base_qual >=20, abs(ref_position- SV_start) <= 2000, !is.na(mod)) %>%
+#              group_by(ID, ref_position) %>%
+#              filter(n()>=1) %>%
+#              ungroup() %>%
+#              group_by(read_id) %>%
+#              filter(n()>3) %>%
+#              ungroup())
+# 
+# ref_BND_reads <- Sys.glob("output/*/*_BND_ref_meth.RDS") %>%
+#   map_dfr( ~ readRDS(.x) %>%
+#              mutate(SampleID= gsub("_BND_ref_meth.RDS", "", basename(.x)),
+#                     mod = case_when(mod_qual >= 0.65 ~ 1,
+#                          mod_qual <= 0.3 ~ 0,
+#                          T ~ NA)) %>%
+#               filter(base_qual >=20, abs(ref_position- SV_start) <= 2000, !is.na(mod), ID %in% unique(alt_BND_reads$ID)))
+#   
+#   
+# BND_reads <- rbind(ref_BND_reads, alt_BND_reads ) %>%
+#   group_by(SampleID, ID) %>%
+#   filter(n_distinct(read_type)== 2)%>%
+#   mutate(random_ref_pos=  SV_start[1]) %>%
+#   mutate(relative_position = ref_position- SV_start,
+#          relative_position = case_when(random_ref_pos != SV_start & relative_position < 0 ~ relative_position,
+#                                        random_ref_pos != SV_start & relative_position > 0 ~ -relative_position,
+#                                        random_ref_pos == SV_start & relative_position > 0 ~ relative_position,
+#                                        random_ref_pos == SV_start & relative_position < 0 ~ -relative_position))
+# 
+# saveRDS(BND_reads, "output/total_bnd_meth.RDS")
+
+BND_reads <- readRDS("output/total_bnd_meth.RDS")
+  
+alt_plot <- BND_reads %>%
+  filter(read_type == "alt", ID == "r_293", SampleID =="134048_7794_T2") %>%
+  ggplot(aes(x = relative_position, y = read_id))+
+  # geom_rect(aes(xmin=-Inf, xmax=0, ymin=-Inf, ymax=Inf), fill =alpha( "pink", 0.006))  +
+  # geom_rect(aes(xmin=0, xmax=Inf, ymin=-Inf, ymax=Inf), fill = alpha("turquoise" , 0.001))  +
+   geom_point(shape = 22, color = "black", aes(fill = mod))+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank())+
+  geom_vline(aes(xintercept =0))+
+  xlim(c(-2000, 2000))
+  
+ref_plot <- BND_reads %>%
+  filter(read_type == "ref", ID == "r_293", SampleID =="134048_7794_T2")%>%
+  group_by(SV_start) %>%
+  group_map( ~ ggplot(.x, aes(x = ref_position, y = read_id, fill = mod, shape = "ref_strand"))+
+  geom_rect(aes(xmin=SV_start, xmax=case_when(BND_type %in% c(4, 2)~ -Inf,
+                                              BND_type %in% c(3, 1) ~+Inf), ymin=-Inf, ymax=Inf), alpha=0.01, fill = "grey")  +
+   geom_point(shape = 22, color = "black")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank())+
+  geom_vline(aes(xintercept =SV_start)) +
+  scale_x_continuous(limits = c(unique(.x$SV_start)- 2000, unique(.x$SV_start)+2000))+
+    {if ((unique(.x$SV_start) == unique(.x$random_ref_pos) & unique(.x$BND_type) %in% c(3, 1))|
+         (unique(.x$SV_start) != unique(.x$random_ref_pos) & !unique(.x$BND_type) %in% c(3, 1))) scale_x_reverse(limits = rev(c(unique(.x$SV_start)- 2000, unique(.x$SV_start)+2000)))  }+
+  facet_wrap(~chrom+SV_start, scales = "free", nrow = 2), .keep = T)
+
+
+ggarrange(alt_plot, ref_plot[[1]], ref_plot[[2]], nrow = 3,  common.legend = T, legend = "bottom", align = "v")
+BND %>%
+  group_by(chr_start, SV_start, chr_end, SV_end, BND_type) %>%
+  group_map(~plot_sv_diagram(.x$chr_start, .x$SV_start, .x$chr_end, .x$SV_end, .x$BND_type), .keep =T)
+```
+
+#poster plot
+
+```{r}
+
+BRCA1_meth <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/134048_7794_T2/Me/134048_7794_T2_m_pileup_tab.bed") %>%
+  filter(V1== "chr17", V2 >= 43125336-2500, V3 <= 43125457+2500)
+
+
+
+fread("output/134048_7794_T2/coverage/134048_7794_T2.per-base.bed.gz") %>%
+  filter(V2 >= 43125336-2500, V3 <= 43125457+2500) %>%
+  ggplot()+
+  geom_rect(aes(xmin = V2, xmax = V3, ymin = 0, ymax = V4), fill = "#B9C6C5")+
+  geom_line(data = BRCA1_meth, aes(x = V2, y = V11/5), color = "#71002B", linewidth = 0.7)+
+  # geom_line(aes(x = V2, y = V4))+
+  geom_rect(aes(xmin = 43125192 , xmax = 43125532, ymin =  -0.7, ymax = -0.5),  fill="#3A4747", color = "#3A4747" , linewidth = 0.2)+
+  scale_y_continuous(name = "Coverage",
+                     sec.axis = sec_axis( trans=~.*5/100,labels = scales::percent, name="% Methylation") ) +
+  xlab("Chromosomal Position (hg38)")+
+  theme_bw()+
+  theme(axis.text.y.right = element_text(colour = "#71002B"),
+        axis.ticks.y.right = element_line(color = "#71002B"),
+        axis.title.y.right = element_text(colour = "#71002B"))
+ggsave("plots/coverage_meth_loss.pdf", height = 3, width = 8)
+
+
+BND_reads %>%
+  filter(read_type == "alt", ID == "r_293", SampleID =="134048_7794_T2") %>%
+  mutate(mod = if_else(mod == 0, "C", "5mC")) %>%
+  ggplot(aes(x = relative_position, y = read_id))+
+  geom_rect(aes(xmin=0, xmax=Inf, ymin=-Inf, ymax=Inf), fill = alpha("#FCFFCC" , 0.05))  +
+   geom_point(shape = 15,  linewidth = 0.1, aes(color = mod),size =2.2 )+
+  scale_color_manual(values =  c("C" = "#2667ff", "5mC" = "#FF3225"), "Base Mod")+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "right")+
+  geom_vline(aes(xintercept =0))+
+  geom_rect(aes(xmin = 43125192 - 43126525, xmax = 43125532- 43126525, ymin =  -0.7, ymax = -0.5),  fill="#3A4747", color = "#3A4747" , linewidth = 0.2)+
+  scale_x_continuous(limits = c(-2000, 2000), name = "Position Relative to Breakpoint")
+
+ggsave("plots/alt_048.pdf", height =4, width = 5.4)
+
+BND_reads %>%
+  filter(read_type == "ref", ID == "r_293", SampleID =="134048_7794_T2", SV_start ==43126525)%>%
+  mutate(mod = if_else(mod == 0, "C", "5mC")) %>%
+  ggplot( aes(x = ref_position-SV_start, y = read_id, fill = mod, shape = "ref_strand"))+
+   geom_point(shape = 15,  linewidth = 0.1, aes(color = mod),size =2.2 )+
+  scale_color_manual(values =  c("C" = "#2667ff", "5mC" = "#FF3225"), "5mC")+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "NA")+
+  geom_vline(aes(xintercept =0)) +
+  geom_rect(aes(xmin = 43125192 - 43126525, xmax = 43125532- 43126525, ymin =  -0.7, ymax = -0.5),  fill="#3A4747", color = "#3A4747" , linewidth = 0.2)+
+  scale_x_continuous(limits = c(-2000, 2000), name = "Position Relative to Breakpoint")
+ggsave("plots/ref_048.pdf", height =4, width = 4.7)
+
+
+
+
+
+BND_reads %>%
+  filter(ID == "r_293", SampleID =="134048_7794_T2", !(read_type == "ref" & SV_start ==42068378 ) )%>%
+  mutate(mod = if_else(mod == 0, "C", "5mC"),
+         relative_position = if_else(read_type == "ref", ref_position-SV_start, relative_position)) %>%
+  ggplot(aes(x = relative_position, y = read_id))+
+  #geom_rect(aes(xmin=0, xmax=Inf, ymin=-Inf, ymax=Inf), fill = alpha("#FCFFCC" , 0.05))  +
+   geom_point(shape = 15,  linewidth = 0.1, aes(color = mod),size =2.2 )+
+  scale_color_manual(values =  c("C" = "#2667ff", "5mC" = "#FF3225"), "Base Mod")+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "right")+
+ # geom_vline(aes(xintercept =0))+
+  geom_rect(aes(xmin = 43125192 - 43126525, xmax = 43125532- 43126525, ymin =  -0.7, ymax = -0.5),  fill="#3A4747", color = "#3A4747" , linewidth = 0.2)+
+  scale_x_continuous(limits = c(-2000, 2000), name = "Position Relative to Breakpoint")
+
+ggsave("plots/total_reads.pdf", height =8, width = 8)
+```
+
+#ovcar8 presentation
+
+```{r}
+
+BRCA1_meth <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8//Me/OVCAR8_extracted_BRCA1.tsv") %>%
+  filter(mod_code == "m") %>%
+  mutate(mod = case_when(mod_qual >=0.7~ "5mC",
+                        mod_qual <= 0.4 ~"C")) 
+
+
+BRCA1_meth %>%
+  filter(!is.na(mod), ref_position>= 43125192-500, ref_position <=43125532+500 ) %>%
+  group_by(read_id) %>%
+  filter(n()>=20) %>%
+  ungroup()%>%  
+  ggplot(aes(x = ref_position, y = read_id))+
+  geom_point(shape = 15,  linewidth = 0.1, aes(color = mod),size =2.2 )+
+  scale_color_manual(values =  c("C" = "#2667ff", "5mC" = "#FF3225"), "Base Mod")+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "right")+
+  geom_rect(aes(xmin = 43125192, xmax = 43125532, ymin =  -0.7, ymax = -0.5),  fill="#3A4747", color = "#3A4747" , linewidth = 0.2)+
+  scale_x_continuous(limits = c(43125192-500, 43125532+500), name = "Position Relative to Breakpoint")
+
+
+ggsave("plots/total_reads.pdf", height =8, width = 8)
+
+read_mapping <- scanBam("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam", param = ScanBamParam(what=c("qname","rname", "pos", "qwidth"), where =))
+```
+
+```{r}
+
+```
+
+#other testing
+
+## visualisation of BND
+
+```{r}
+
+chr_start = "chr10"
+SV_start = 23721056
+chr_end = "chr11"
+SV_end = 82035995
+BND_type = 3
+
+
+
+plot_sv_diagram(chr_start, SV_start, chr_end, SV_end, BND_type)
+
+
+```
+
+```{r}
+
+read_mapping <- scanBam("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_nanomonsv_bp.bam", param = ScanBamParam(what=c("qname","rname", "pos", "qwidth")))
+
+read_sv_mapping <- data.frame(read_mapping) %>%
+  mutate(q_end = pos+ qwidth,
+         read_type = if_else(qname %in% supporting_read$read_id, "alt", "ref")) %>%
+  dplyr::select(read_id = qname, chrom = rname, q_start = pos, q_end, read_type) %>%
+  right_join(sv %>%
+              distinct(), by = join_by(chrom == SV_chr, q_start<= SV_start, q_end >= SV_end))
+
+
+
+OVCAR8_nanomonsv_meth <- read_sv_mapping %>%
+  left_join(supporting_read %>% dplyr::select(ID, read_id, q_alt_start)) %>%
+  inner_join(modkit_extract) %>%
+  mutate(plot_pos = case_when(
+    ref_position != -1 & SV_type == "DEL" ~ ref_position,
+    ref_position != -1 & ref_position < SV_start ~ ref_position,
+    ref_position != -1 & ref_position > SV_start ~ ref_position +SV_len,
+    ref_position == -1 & SV_type %in% c("INS","DUP")~ forward_read_position - q_alt_start + SV_start),
+    SV_end = if_else( SV_type %in% c("INS","DUP"), SV_start+SV_len, SV_end),
+    mod_binary = case_when(mod_qual >=0.6 ~ 1, mod_qual <= 0.3 ~0,
+                           TRUE ~ 0.5)) %>%
+  filter(mod_binary != 0.5) %>%
+  group_by(ID,plot_pos, read_type) %>%
+  filter(n()>2) %>%
+  ungroup()
+
+
+OVCAR8_nanomonsv_meth%>% 
+  filter(abs(plot_pos- SV_start) <600 |abs(plot_pos- SV_end) <600) %>%
+  ggplot()+
+  facet_wrap(~read_type, scales = "free_y", nrow =2)+
+  geom_rect(aes(xmin = SV_start, xmax = SV_end, ymin=0, ymax=Inf), fill = "green", alpha = 0.3)+
+  geom_point(aes(y = read_id, x = plot_pos, color = mod_qual))+
+  theme_bw()+
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+OVCAR8_diff <- OVCAR8_nanomonsv_meth %>%
+  group_by(ID) %>%
+  filter(n_distinct(read_type)==2) %>%
+  ungroup() %>%
+  group_by(ID, plot_pos, read_type, SV_type, SV_start, SV_end, chrom, SV_len) %>%
+  summarise(mean_mod = sum(mod_binary==1, na.rm = T)/n() ) %>%
+  pivot_wider(names_from = read_type, values_from = mean_mod) %>%
+  filter(plot_pos <= SV_start| plot_pos>= SV_end) %>%
+  mutate(diff = alt - ref,
+         relative_pos = if_else(plot_pos<= SV_start, plot_pos-SV_start, plot_pos -SV_end))
+
+
+OVCAR8_diff %>%
+  filter(abs(relative_pos) < 2500) %>%
+  drop_na() %>%
+  ggplot(aes(x = relative_pos, y =diff))+
+  geom_bin2d()+
+  facet_wrap(~SV_type)+
+  scale_fill_distiller(palette = "Spectral", trans = "log2")+
+  theme_bw()
+
+
+OVCAR8_diff %>%
+  filter(abs(relative_pos) < 2500) %>%
+  drop_na() %>%
+  mutate(change = if_else(abs(diff) > 0.6, "changed", "unchanged"),
+         relative_dir = if_else(relative_pos < 0 , "L", "R")) %>%
+  group_by(ID, SV_type, change, relative_dir) %>%
+  summarise(nearest = min(abs(relative_pos))) %>%
+  ungroup() %>%
+  ggplot(aes(x = relative_dir, y = nearest))+
+  geom_violin()+
+  facet_wrap(~change)
+```
+
+##extract microhomology
+
+```{r}
+library(BSgenome)
+library(Biostrings)
+hg38 <- getBSgenome('BSgenome.Hsapiens.UCSC.hg38')
+
+get_flanking_sequence <- function(indels) {
+
+    if (dim(indels)[1] > 0) {
+        five_prime_flank <- getSeq(hg38, indels$seqnames, indels$start - 25, indels$start)
+        three_prime_flank <- getSeq(hg38, indels$seqnames, indels$end + 1, indels$end + 26)
+        deleted <- getSeq(hg38, indels$seqnames, indels$start, indels$end )
+    } else {
+        five_prime_flank <- c()
+        three_prime_flank <- c()
+        deleted <- c()
+    }
+    return(cbind(indels, tibble(deleted = as.character(deleted),
+                                five_prime_flank = as.character(five_prime_flank), 
+                                three_prime_flank = as.character(three_prime_flank))))
+}
+get_match_length <- function(x, y) { 
+  mat <- nucleotideSubstitutionMatrix(match = 1, mismatch = -3, baseOnly = TRUE)
+    return(unlist(pairwiseAlignment(x, y, type = "local",
+                                    substitutionMatrix = mat,
+                                    gapOpening = 5, gapExtension = 5,
+                                    scoreOnly = TRUE)))
+}
+
+microhomology_summary <- function(indel_table) {
+    indel_table <- indel_table %>% filter(
+        ! is.na(deleted),
+        ! is.na(three_prime_flank),
+        ! is.na(five_prime_flank)
+    ) 
+
+    print('computing match statistics')
+
+    if (dim(indel_table)[1] > 0) {
+        three_prime <- apply(indel_table, 1, function(z) {
+            get_match_length(z['deleted'], z['three_prime_flank'])
+        })
+
+        five_prime <- apply(indel_table, 1, function(z) {
+            get_match_length(rev_char(z['deleted']), rev_char(z['five_prime_flank']))
+        })
+
+        max_match <- apply(cbind(three_prime, five_prime), 1, max)
+
+        indel_table$microhomology_length <- max_match
+        indel_table$is_microhomology <- max_match > 2
+    } else {
+        indel_table$microhomology_length <- numeric()
+        indel_table$is_microhomology <- logical()
+    }
+
+    return(indel_table)
+}
+
+rev_char <- function(char) {
+    sapply(char, function(a) {
+           paste(rev(substring(a,1:nchar(a),1:nchar(a))),collapse="")
+    })
+}
+
+get_match_length <- function(x, y) { 
+    min_length <- min(nchar(x), nchar(y))
+    if (min_length == 0) {
+        return(0) 
+    } else { 
+        return(sum(sapply(1:min_length, function(i) {
+            substr(x, 1, i) == substr(y, 1, i) 
+        })))
+    }
+}
+
+
+del <- sv %>%
+  filter(SV_type == "DEL", abs(SV_len)< 5000) %>%
+  dplyr::select(seqnames = SV_chr, start = SV_start, end = SV_end, ID)
+
+
+del_seq <- get_flanking_sequence(del) %>%
+  filter(!str_detect(deleted, "N"), !str_detect(five_prime_flank, "N"), !str_detect(three_prime_flank, "N"))
+
+indel_flanked <- del_seq %>%
+  microhomology_summary()
+
+
+indel_flanked %>%
+  ggplot(aes(x= microhomology_length))+
+  geom_bar(stat = "count")
+
+
+indel_flanked %>%
+  filter(microhomology_length>20)
+
+
+ OVCAR8_diff %>%
+   left_join(indel_flanked %>%
+     dplyr::select(ID,deleted, five_prime_flank, three_prime_flank, microhomology_length)) %>%
+   drop_na() %>%
+   filter(abs(relative_pos) <500) %>%
+   group_by(microhomology_length) %>%
+   filter(n_distinct(ID)>10)%>%
+   ungroup() %>%
+   ggplot(aes(x = relative_pos, y = ID, color = diff))+
+   geom_point()+
+  scale_color_distiller(palette = "Spectral")+
+   facet_wrap(~microhomology_length, scales = "free", ncol = 2)+
+   theme_bw()+
+   theme(axis.text.y = element_blank(),
+         axis.ticks.y = element_blank())
+```
+
+```{r}
+OVCAR8_diff %>%
+  drop_na() %>%
+  filter(abs(relative_pos) < 1500, SV_type == "DEL") %>%
+  mutate(change = if_else(abs(diff) >= 0.6, "changed", "unchanged"),
+         relative_dir = if_else(relative_pos < 0 , "L", "R"))  %>%
+  group_by(ID) %>%
+  mutate(diff_prop = sum(change == "changed")/n(),
+         diff_n =sum(change == "changed") ) %>%
+  filter(diff_prop >=0.1, diff_n >=4) %>%
+  mutate(order= paste(diff_n, ID,sep = "_"))%>%
+  ungroup() %>%
+  ggplot(aes(x = relative_pos, y = ID, fill = diff))+
+   geom_point(shape = 22, color = "black", size =5)+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white")+
+   theme_bw()+
+   theme(
+         axis.ticks.y = element_blank(),
+         panel.grid.major.y = element_blank(),
+         )+
+  facet_wrap(~SV_type,scales = "free_y")
+
+
+
+
+OVCAR8_diff %>%
+  drop_na() %>%
+  filter(abs(relative_pos) < 1500, SV_type == "INS") %>%
+  mutate(change = if_else(abs(diff) >= 0.6, "changed", "unchanged"),
+         relative_dir = if_else(relative_pos < 0 , "L", "R"))  %>%
+  group_by(ID) %>%
+  mutate(diff_prop = sum(change == "changed")/n(),
+         diff_n =sum(change == "changed") ) %>%
+  filter(diff_prop >=0.1, diff_n >=4) %>%
+  mutate(order= paste(diff_n, ID,sep = "_"))%>%
+  ungroup() %>%
+  ggplot(aes(x = relative_pos, y = ID, fill = diff))+
+   geom_point(shape = 22, color = "black", size =5)+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white")+
+   theme_bw()+
+   theme(
+         axis.ticks.y = element_blank(),
+         panel.grid.major.y = element_blank(),
+         )+
+  facet_wrap(~SV_type,scales = "free_y")
+  
+```
+
+# achived script
+
+## Severus
+
+```{r}
+sv_severus <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/severus/somatic_SVs/severus_somatic.vcf", skip = "#CHROM") %>%
+  filter(FILTER== "PASS",
+         `#CHROM` %in% paste0("chr", seq(1,22)),
+         if_any(matches("phased_sorted"), ~ str_starts(.x, "0/1")),
+         startsWith(INFO, "PRECISE")) %>%
+  mutate(SV_type = str_extract(INFO, "(?<=SVTYPE=)[^;]+"),
+         SV_end = as.numeric(str_extract(INFO, "(?<=END=)[^;]+")),
+         SV_len = as.numeric(str_extract(INFO, "(?<=SVLEN=)[^;]*")),
+         SV_end = if_else(SV_type == "INS", POS, SV_end),
+         BND_type = case_when(startsWith(ALT, "N[chr") ~1,
+                              startsWith(ALT, "]chr") ~2,
+                              startsWith(ALT, "N]chr") ~3,
+                              startsWith(ALT, "[chr") ~4 ),
+         ID = gsub("_1$|_2$", "", ID))%>%
+  dplyr::rename(SV_start = POS) 
+
+
+sv_severus_germ <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/severus/all_SVs/severus_all.vcf", skip = "#CHROM")%>%
+  mutate(SV_type = str_extract(INFO, "(?<=SVTYPE=)[^;]+"),
+         SV_start = POS,
+         SV_end = as.numeric(str_extract(INFO, "(?<=END=)[^;]+")),
+         SV_len = as.numeric(str_extract(INFO, "(?<=SVLEN=)[^;]*")),
+         SV_end = if_else(SV_type == "INS", POS, SV_end),
+         ID = gsub("_1|_2", "", ID)) %>%
+  filter(!ID %in% sv_severus,
+         FILTER== "PASS",
+         `#CHROM` %in% paste0("chr", seq(1,22)),
+         startsWith(OVCAR8_phased_sorted, "0/1"),
+         startsWith(INFO, "PRECISE"))
+
+
+sv_severus_VNTR <- sv_severus%>%
+         filter(str_detect(INFO, "INSIDE_VNTR=TRUE"))
+
+sv_severus<-sv_severus%>%
+         filter(!str_detect(INFO, "INSIDE_VNTR=TRUE"))
+
+
+
+```
+
+##NanomonSV
+
+```{r}
+sv_nanomonsv <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/SV/OVCAR8.nanomonsv.result.vcf", skip ="#CHROM")%>%
+  filter(FILTER== "PASS",
+         `#CHROM` %in% paste0("chr", seq(1,22))) %>%
+  separate(TUMOR, into = c("TR", "VR"), sep = ":") %>%
+    mutate(SV_type = str_extract(INFO, "(?<=SVTYPE=)[^;]+"),
+         SV_end = as.numeric(str_extract(INFO, "(?<=END=)[^;]+")),
+         SV_len = as.numeric(str_extract(INFO, "(?<=SVLEN=)[^;]*")),
+         SV_ins_len = as.numeric(str_extract(INFO, "(?<=SVINSLEN=)[^;]*")),
+         SV_end = if_else(SV_type == "INS", POS, SV_end),
+         BND_type = case_when(endsWith(ALT, "[") ~1,
+                              startsWith(ALT, "]chr") ~2,
+                              endsWith(ALT, "]") ~3,
+                              startsWith(ALT, "[chr") ~4 ),
+         ID = gsub("_1$|_0$", "", ID),
+         TR= as.numeric(TR),
+         VR = as.numeric(VR),
+         SV_len = if_else(is.na(SV_len), SV_ins_len, SV_len)) %>%
+  dplyr::select(-SV_ins_len) %>%
+  dplyr::rename(SV_start = POS) %>%
+  filter(TR <100, VR/TR <0.8, VR/TR >=0.2)
+
+
+sv_nanomonsv_supporting_read <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/SV/OVCAR8.nanomonsv.supporting_read.txt") %>%
+  `colnames<-`(c("start_chr", "start_pos", "start_strand", "end_chr", "end_pos", "end_strand","ins_seq", "ID", "read_id", "alt_q_pos", "read_strand")) %>%
+  filter(ID %in% sv_nanomonsv$ID) %>%
+  dplyr::select("ID", "read_id", "alt_q_pos", "read_strand")
+
+```
+
+##merge Severus and NanomonSV
+
+```{r}
+sv_merged <- sv_nanomonsv %>%
+  mutate(SV_start_20u = SV_start-20, 
+         SV_start_20d = SV_start +20) %>%
+  left_join(sv_severus_VNTR %>%
+  dplyr::select(`#CHROM`, SV_start_severus =SV_start , SV_end_severus = SV_end, SV_len_severus =SV_len, SV_type_severus = SV_type),
+  by = join_by(`#CHROM`==`#CHROM`, SV_start_20u <= SV_start_severus, SV_start_20d >= SV_start_severus) ) %>%
+  filter(is.na(SV_start_severus)) %>%
+  dplyr::select(-ends_with("_severus")) %>%
+  distinct() %>%
+  left_join(sv_severus_germ%>%
+  dplyr::select(`#CHROM`, SV_start_severus =SV_start ,SV_end_severus = SV_end, SV_len_severus =SV_len, SV_type_severus = SV_type),
+  by = join_by(`#CHROM`==`#CHROM`, SV_start_20u <= SV_start_severus, SV_start_20d >= SV_start_severus) ) %>%
+  filter(!is.na(SV_start_severus)) %>%
+  dplyr::select(-c(SV_start_20u, SV_start_20d, SV_start_severus, SV_end_severus,INFO)) %>%
+  distinct()
+
+```
+
+## extract read id and merge for SV
+
+```{r}
+# library(rtracklayer)
+# pileup_read_id_grange<- sv_merged %>%
+#     mutate(SV_end = if_else(is.na(SV_end), SV_start, SV_end))%>%
+#     dplyr::select(seqnames = `#CHROM`, start = SV_start, end = SV_end) %>%
+#   distinct() %>%
+#   makeGRangesFromDataFrame(.)
+# 
+# export.bed(pileup_read_id_grange, con="output/OVCAR8/OVCAR8_merged_sv.bed")
+
+
+supporting_read_mapping_nanomonsv <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/SV/OVCAR8.nanomonsv.supporting_read.txt",header = F) %>%
+  `colnames<-`(c("SV_start_chr", "SV_start_pos","SV_start_strand", "SV_end_chr", "SV_end_pos", "SV_end_strand", "alt_seq", "ID", "read_id", "read_alt_pos", "read_strand")) %>%
+  filter(ID %in% sv_merged$ID)
+
+read_mapping <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_merged_sv_readid.tsv", col.names = c("sv","read_id")) %>%
+  separate("sv", into = c("#CHROM", "SV_start", "SV_end")) %>%
+  mutate(SV_start = as.numeric(SV_start)+1,
+         SV_end = as.numeric(SV_end))%>%
+  left_join(sv_merged %>%
+    mutate(SV_end = if_else(is.na(SV_end), SV_start, SV_end))%>%
+              dplyr::select(`#CHROM`, SV_start, SV_end, ID) ) %>%
+  separate_rows(read_id, sep = ",") %>%
+  distinct() %>%
+  left_join(supporting_read_mapping_nanomonsv %>%
+  dplyr::select("ID", "read_id", "read_alt_pos", "read_strand") ) %>%
+  mutate(read_type = if_else(!is.na(read_alt_pos), "alt", "ref"))
+
+
+
+modkit_extract <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_merged_SV_modkit_extract.tsv") %>%
+  filter(mod_code == "m") %>%
+  dplyr::select(read_id, forward_read_position, ref_position,chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual)
+
+  
+```
+
+## DEL pull reads
+
+```{r}
+DEL <- sv_merged %>%
+  filter(str_detect(ALT, "DEL"))
+
+
+DEL_reads <- DEL %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+  left_join(modkit_extract)
+
+
+merged_DEL_reads <- DEL_reads %>%
+  mutate(mod = case_when(mod_qual >= 0.65 ~ 1,
+                         mod_qual <= 0.3 ~ 0,
+                         T ~ NA)) %>%
+  filter(base_qual >=20, !is.na(mod) ) %>%
+  group_by(ID, ref_position) %>%
+  filter(n()>=2) %>%
+  ungroup()  %>%
+  group_by(ID) %>%
+  filter(n_distinct(read_type)== 2) %>%
+  ungroup()
+
+
+
+merged_DEL_reads %>%
+  filter(ID == "d_2241", ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
+  ggplot(aes(x = ref_position, y = read_id))+
+  geom_rect(aes(xmin = SV_start, xmax =SV_end, ymin = -Inf, ymax = Inf ), fill = alpha("grey", 0.01))+
+   geom_point(shape = 22, color = "black", aes(fill = mod))+
+  
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank())+
+  facet_wrap(~read_type, nrow = 2)
+```
+
+## INS pull reads
+
+```{r}
+
+sv_merged %>%
+  filter(str_detect(ALT, "INS")) %>%
+  arrange(ID) %>%
+  dplyr::select(ID) %>%
+  left_join(read_mapping%>%
+            dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+  filter(read_type == "alt") %>%
+  pull(read_id) %>%
+  unique(.)%>%
+  write_lines(paste0(sample_folder, "/ins_read_name.tsv"))
+
+
+ins_primary_mapping <- fread("output/OVCAR8/ins_read_name_primary_map.tsv", col.names = c("read_id",  "flag", "rname", "pos", "cigar")) %>%
+  mutate(strand = if_else(flag %in% c(16, 2064), "-", "+")) %>%
+  rowwise() %>%
+  mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+  separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+  mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+         read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+  dplyr::select(-pos, -flag)
+
+ins_supporting_reads <- ins_primary_mapping %>%
+  left_join(modkit_extract %>%
+              dplyr::select(read_id, forward_read_position, read_length, mod_qual, base_qual, ref_position) %>%
+              distinct(),
+            by =join_by(read_id == read_id, read_start <= forward_read_position, read_end >= forward_read_position)) %>%
+  dplyr::rename(chrom = rname, ref_strand = strand) %>%
+  filter(!is.na(forward_read_position) ) %>%
+  mutate(ref_start = if_else(ref_strand == "-", ref_end, ref_start)) %>%
+  left_join(read_mapping %>%
+              dplyr::select(read_id, ID) %>%
+              left_join(sv_merged %>%
+              dplyr::select(ID, SV_start)) %>%
+              distinct()) 
+ins_shift = setDT(ins_supporting_reads %>%
+                    filter(ref_position== -1))
+
+ins_shift[, shift_position := deduce_ref_pos_ins_shift(cigar, ref_start, forward_read_position, ref_strand, SV_start)]
+
+
+INS <- sv_merged %>%
+  filter(str_detect(ALT, "INS"))
+
+INS_reads <- INS %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+  left_join(modkit_extract)
+
+
+merged_INS_reads <- INS_reads %>%
+  mutate(mod = case_when(mod_qual >= 0.6 ~ 1,
+                         mod_qual <= 0.4 ~ 0,
+                         T ~ NA)) %>%
+  filter(base_qual >=20, !is.na(mod) ) %>%
+  left_join(ins_shift %>%
+              dplyr::select(read_id, forward_read_position, ID, shift_position)) %>%
+  mutate(shift_position = case_when(ref_position != -1 & ref_position <= SV_start ~ ref_position,
+                                    ref_position != -1 & ref_position > SV_start ~ ref_position+ SV_len,
+                                    T ~ shift_position),
+         shift_position = if_else(ref_position == -1 & ref_strand == "-", shift_position +SV_len, shift_position  )) %>%
+  filter(abs(SV_start -ref_position) <=2000 | ref_position == -1, !is.na(shift_position)) %>%
+  group_by(ID, read_type, shift_position) %>%
+  filter(n()>2) %>%
+  ungroup() %>%
+  group_by(ID, read_type) %>%
+  filter(n_distinct(shift_position)>2,
+         n_distinct(read_id)>2) %>%
+  ungroup() %>%
+  group_by(ID) %>%
+  filter(n_distinct(read_type)== 2) %>%
+  ungroup()
+  
+
+  
+merged_INS_reads %>%
+  filter(base_qual >=20, !is.na(mod) ) %>%
+  filter(abs(SV_start -ref_position) <=2000 | ref_position == -1, !is.na(shift_position)) %>%
+  group_by(ID, read_type, shift_position) %>%
+  filter(n()>2) %>%
+  ungroup() %>%
+  group_by(ID, read_type) %>%
+  filter(n_distinct(shift_position)>2,
+         n_distinct(read_id)>2) %>%
+  ungroup() %>%
+  group_by(ID) %>%
+  filter(n_distinct(read_type)== 2) %>%
+  ungroup()  %>%
+  filter(ID == "i_1316") %>%
+  ggplot(aes(x = shift_position, y = read_id))+
+  geom_rect(aes(xmin = SV_start, xmax =SV_end+SV_len, ymin = -Inf, ymax = Inf ), fill = alpha("grey", 0.01))+
+   geom_point(shape = 22, color = "black", aes(fill = mod))+
+  
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+       axis.text.y = element_blank())+
+  facet_wrap(~read_type, nrow = 2, scales = "free_y")
+
+test %>%
+  left_join(ins_cigar)
+```
+
+## BND pull reads
+
+```{r}
+BND <- sv_merged %>%
+  filter(str_detect(ALT, "\\]")|str_detect(ALT, "\\[")) %>%
+  arrange(ID) %>%
+  mutate(chr_end = str_extract(ALT, "chr[0-9XYM]+"),
+         SV_end =as.numeric(str_extract(ALT, "(?<=:)[0-9]+"))) %>%
+  dplyr::select(ID, ALT, chr_start = `#CHROM`, SV_start, chr_end, SV_end, BND_type)
+
+
+BND_reads <- BND %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+  left_join(modkit_extract)
+
+
+BND %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+  filter(read_type == "alt") %>%
+  pull(read_id) %>%
+  unique(.)%>%
+  write_lines("output/OVCAR8/bnd_read_name_saf_tag.tsv")
+
+bnd_primary_mapping <- fread("output/OVCAR8/bnd_read_name_primary_map.tsv", col.names = c("read_id",  "flag", "rname", "pos", "cigar")) %>%
+  mutate(strand = if_else(flag %in% c(16, 2064), "-", "+")) %>%
+  rowwise() %>%
+  mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+  separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+  mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+         read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+  dplyr::select(-pos, -flag)
+
+
+bnd_saf_mapping <- fread("output/OVCAR8/bnd_read_name_saz_map.tsv", col.names = c("read_id", "saz_tag")) %>%
+  mutate(saz_tag = gsub("SA:Z:", "", saz_tag)) %>%
+  separate_rows(saz_tag, sep = ";") %>%
+  filter(saz_tag != "") %>%
+  separate(saz_tag, into = c("rname", "pos", "strand", "cigar", "MAPQ", "NM"), sep = ",") %>%
+  rowwise() %>%
+  mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+  separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+  mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+         read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+  dplyr::select(-c(pos, MAPQ, NM))%>%
+  left_join(bnd_primary_mapping %>%
+              dplyr::select(read_id, ref_start_primary = ref_start, ref_end_primary = ref_end, strand , rname), 
+            by= join_by(rname == rname, strand == strand, read_id == read_id, ref_start <=ref_end_primary, ref_end >= ref_start_primary)) %>%
+  filter(is.na(ref_end_primary)) %>%
+  dplyr::select(-ref_start_primary, -ref_end_primary)
+
+BND_supporting_reads <- rbind(bnd_saf_mapping, bnd_primary_mapping) %>%
+  left_join(modkit_extract %>%
+              dplyr::select(read_id, forward_read_position, read_length, mod_qual, base_qual) %>%
+              distinct(),
+            by =join_by(read_id == read_id, read_start <= forward_read_position, read_end >= forward_read_position)) %>%
+  dplyr::rename(chrom = rname, ref_strand = strand) %>%
+  filter(!is.na(forward_read_position) ) %>%
+  mutate(ref_start = if_else(ref_strand == "-", ref_end, ref_start))
+
+BND_supporting_reads = setDT(BND_supporting_reads)
+BND_supporting_reads[, ref_position := deduce_reference_position(cigar, ref_start, forward_read_position, ref_strand)]
+
+BND_supporting_reads <-BND_supporting_reads %>%
+  left_join(BND %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_alt_pos, read_type) %>%
+              distinct()) %>%
+  filter(read_type == "alt"), by = join_by(read_id == read_id, chrom ==chr_start)) %>%
+  filter(SV_start >= ref_start, ref_end >= SV_start) %>%
+  dplyr::select(-c(cigar, ref_start, ref_end, read_start, read_end)) %>%
+  distinct()
+
+BND_ref_reads  <- modkit_extract %>%
+              dplyr::select(chrom, read_id, ref_strand,ref_position, forward_read_position, read_length, mod_qual, base_qual) %>%
+              distinct() %>%
+  right_join(BND %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_alt_pos, read_type) %>%
+              distinct()) %>%
+  filter(read_type == "ref"), by = join_by(read_id == read_id, chrom ==chr_start)) 
+
+
+merged_BND_reads <- rbind(BND_ref_reads, BND_supporting_reads ) %>%
+  filter(base_qual >=20 ) %>%
+  group_by(ID, ref_position) %>%
+  filter(n()>=1) %>%
+  ungroup()  %>%
+  group_by(ID) %>%
+  filter(n_distinct(read_type)== 2)
+
+
+
+merged_BND_reads%>%
+  group_by(SV_start) %>%
+  group_map(~
+   ggplot(.x,  aes(x = ref_position, y = read_id, fill = mod_qual, shape = "ref_strand"))+
+   geom_point(shape = 22, color = "black")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())+
+  # geom_vline(aes(xintercept = SV_start))+
+  facet_wrap(~ID+read_type+SV_start, scales = "free_y"), .keep= T)
+
+
+
+ind_BND <- merged_BND_reads%>%
+  filter(ID == "r_303", abs(ref_position- SV_start) <= 2000) %>%
+  mutate(random_ref_pos=  SV_start[1]) %>%
+  mutate(relative_position = ref_position- SV_start,
+         relative_position = case_when(random_ref_pos != SV_start & relative_position < 0 ~ relative_position,
+                                       random_ref_pos != SV_start & relative_position > 0 ~ -relative_position,
+                                       random_ref_pos == SV_start & relative_position > 0 ~ relative_position,
+                                       random_ref_pos == SV_start & relative_position < 0 ~ -relative_position),
+         mod = case_when(mod_qual >= 0.65 ~ 1,
+                         mod_qual <= 0.3 ~ 0,
+                         T ~ NA))%>%
+  filter(!is.na(mod)) %>%
+  group_by(relative_position) %>%
+  filter(n()>1) %>%
+  ungroup()%>%
+  group_by(read_id) %>%
+  filter(n()>3)
+  
+  
+  
+alt_plot <- ind_BND %>%
+  filter(read_type == "alt") %>%
+  ggplot(aes(x = relative_position, y = read_id))+
+  # geom_rect(aes(xmin=-Inf, xmax=0, ymin=-Inf, ymax=Inf), fill =alpha( "pink", 0.006))  +
+  # geom_rect(aes(xmin=0, xmax=Inf, ymin=-Inf, ymax=Inf), fill = alpha("turquoise" , 0.001))  +
+   geom_point(shape = 22, color = "black", aes(fill = mod))+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank())+
+  geom_vline(aes(xintercept =0))+
+  xlim(c(-2000, 2000))
+  
+ref_plot <- ind_BND %>%
+  filter(read_type == "ref")%>%
+  group_by(SV_start) %>%
+  group_map( ~ ggplot(.x, aes(x = ref_position, y = read_id, fill = mod, shape = "ref_strand"))+
+  geom_rect(aes(xmin=SV_start, xmax=case_when(BND_type %in% c(4, 2)~ -Inf,
+                                              BND_type %in% c(3, 1) ~+Inf), ymin=-Inf, ymax=Inf), alpha=0.01, fill = "grey")  +
+   geom_point(shape = 22, color = "black")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y = element_blank())+
+  geom_vline(aes(xintercept =SV_start)) +
+  scale_x_continuous(limits = c(unique(.x$SV_start)- 2000, unique(.x$SV_start)+2000))+
+    {if ((unique(.x$SV_start) == unique(.x$random_ref_pos) & unique(.x$BND_type) %in% c(3, 1))|
+         (unique(.x$SV_start) != unique(.x$random_ref_pos) & !unique(.x$BND_type) %in% c(3, 1))) scale_x_reverse(limits = rev(c(unique(.x$SV_start)- 2000, unique(.x$SV_start)+2000)))  }+
+  facet_wrap(~chrom+SV_start, scales = "free", nrow = 2), .keep = T)
+
+
+ggarrange(alt_plot, ref_plot[[1]], ref_plot[[2]], nrow = 3,  common.legend = T, legend = "bottom", align = "v")
+BND %>%
+  group_by(chr_start, SV_start, chr_end, SV_end, BND_type) %>%
+  group_map(~plot_sv_diagram(.x$chr_start, .x$SV_start, .x$chr_end, .x$SV_end, .x$BND_type), .keep =T)
+```
+
+## extract supplementary aligned read id (supporting read)first
+
+```{r}
+sv %>%
+  left_join(supporting_read) %>%
+  pull(read_id) %>%
+  unique() %>%
+  write_lines(., "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/nanomonsv_supporting_read_id.tsv")
+
+supplementary_read_bnd <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_nanomonsv_modkit_extract.tsv") %>%
+  filter(mod_code == "m")
+
+supplementary_read_matrix <- sv %>%
+  filter(SV_type == "BND") %>%
+  dplyr::select(ID, SV_type, TR, VR, SV_start, SV_end) %>%
+  distinct() %>%
+  left_join(supporting_read %>%
+              dplyr::select(ID, read_id, q_alt_start)) %>%
+  group_by(read_id) %>%
+  filter(n_distinct(ID) ==1) %>%
+  ungroup() %>%
+  left_join(supplementary_read_bnd %>%
+              dplyr::select(read_id, forward_read_position, ref_position, chrom, mod_strand, ref_strand, mod_qual, base_qual)) %>%
+  mutate(forward_read_position = if_else(ref_strand == "-", forward_read_position-1, forward_read_position),
+         ref_position = if_else(ref_strand == "-"& ref_position != -1, ref_position -1, ref_position),
+         relative_pos = forward_read_position - q_alt_start)%>%
+  filter(abs(relative_pos)< 1000, base_qual >=20 )%>%
+  group_by(ID) %>%
+  filter(n_distinct(read_id)>=3) %>%
+  ungroup() %>%
+  mutate(read_type = "alt")
+
+primary_read_matrix <- supplementary_read_matrix  %>%
+  dplyr::select(ID) %>%
+  distinct() %>%
+  left_join(OVCAR8_nanomonsv_meth %>%
+              filter(! read_id %in% unique(supplementary_read_matrix$read_id), SV_type == "BND") %>%
+              filter(ref_position != -1) %>%
+              mutate(relative_pos = ref_position -SV_start)) %>%
+              dplyr::select(all_of(colnames(supplementary_read_matrix))) %>%
+  mutate(read_type = "ref")%>%
+  filter(abs(relative_pos)< 1000, base_qual >=20 )
+
+
+plot_list <- rbind(supplementary_read_matrix, primary_read_matrix) %>%
+  mutate(SV_start = if_else(read_type == "alt", NA, SV_start)) %>%
+  group_by(ID) %>%
+  group_map(~ggplot(.x, aes(x = relative_pos, y = read_id, fill = mod_qual))+
+   geom_point(shape = 22, color = "black")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white",midpoint = 0.5)+
+  theme_bw()+
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())+
+  facet_wrap(~ID+read_type+SV_start, scales = "free")+
+  geom_vline(xintercept = 0)+
+  xlim(c(-1000, 1000)), .keep =T)
+
+
+pdf("plots/SV_ovcar8_test.pdf", onefile = T,)
+lapply(plot_list,print)
+dev.off()
+
+
+```

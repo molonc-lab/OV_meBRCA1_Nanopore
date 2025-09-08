@@ -47,7 +47,7 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
-
+*Palimpsest*
 #outputs
 *.txt
 *.tsv
@@ -59,8 +59,10 @@ rsconnect/
 *.vcf
 plots/*
 *.gz
+*.tbi
 *.csv
 *.pdf
+*.png
 *.bed
 *.html
 *.summary
@@ -69,12 +71,24 @@ output*/*
 data/*
 ref/*
 *.rds
+*.RDS
 *.RData
 *.e*
 *.o*
 igv_screenshot/*
 *rmarkdown
 *output_err/*
+LUNG_bam/*
+Me_all/*
+Palimpsest/*
+mRNA/*
+clairs_models/
+
+#cnvkit output
+*.cns
+*.cnn
+*.cnr
+*.loci
 
 #supporting files
 *.chain
@@ -82,3 +96,6 @@ igv_screenshot/*
 #logs
 *.log
 *.e{0-9}+
+
+#plots
+#

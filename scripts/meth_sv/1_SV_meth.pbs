@@ -1,5 +1,5 @@
 #PBS -r n
-#PBS -l mem=24GB,walltime=3:00:00,ncpus=1
+#PBS -l mem=64GB,walltime=4:00:00,ncpus=16
 #PBS -m ae
 #PBS -M lijun.xu@qimrberghofer.edu.au
 #PBS -v SampleID
@@ -15,10 +15,10 @@ module load bedtools/2.31.1
 sample_dir="${wk_dir}/output/${SampleID}"
 
 # merge SV from severus and nanomonsv
-Rscript ${wk_dir}/scripts/meth_sv/merge_severus_nanomonsv.R ${wk_dir} ${SampleID}
+Rscript ${wk_dir}/scripts/meth_sv/serverus_extract_sv_region.R ${wk_dir} ${SampleID}
 
 # subset 
-samtools view -bh -L ${sample_dir}/${SampleID}_merged_sv.bed -@ 8 ${sample_dir}/${SampleID}_mapped_sc.bam > ${sample_dir}/${SampleID}_merged_sv.bam
+samtools view -bh -L ${sample_dir}/${SampleID}_merged_sv.bed -@ 16 ${sample_dir}/${SampleID}_mapped_sc.bam > ${sample_dir}/${SampleID}_merged_sv.bam
 
 # extract support read ID from nanomonsv output
 python ${wk_dir}/scripts/meth_sv/extract_split_readid.py -b ${sample_dir}/${SampleID}_mapped_sc.bam \

@@ -27,12 +27,12 @@ modkit_extract <- fread(paste0(sample_folder, "/", SampleID, "_merged_SV_modkit_
   dplyr::select(read_id, forward_read_position, ref_position,chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual)
 
 DEL <- sv_merged %>%
-  filter(str_detect(ALT, "DEL"))
+  filter(SV_type == "DEL")
 
 
 DEL_reads <- DEL %>%
   left_join(read_mapping%>%
-              dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+              dplyr::select(ID, read_id, read_type)) %>%
   left_join(modkit_extract) 
 
 

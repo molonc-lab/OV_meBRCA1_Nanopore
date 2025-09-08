@@ -7,7 +7,7 @@ editor: visual
 ```{r}
 #| echo: false
 #| include: false
-# library(signal)
+
 library("data.table")
 library("ggplot2")
 library("tidyverse")
@@ -26,12 +26,30 @@ library(Rsamtools)
 library(ggbeeswarm)
 library(rtracklayer)
 library(VennDiagram)
+library(BSgenome.Hsapiens.UCSC.hg38)
+hg38 <- getBSgenome('BSgenome.Hsapiens.UCSC.hg38')
 
+
+sample_name_mapping=data.frame(sample = c("OVCAR8", "OVCAR8_LP_A6_30","OVCAR8_LP_H4_53", "UWB1", "UWB1_BRCA1", "WEHI_CS62",
+                                          "134011_1910_T4", "134062_9174_T4",
+                                          "SFRC01585S1_2163_T3","SFRC01428S1_22235_T2", "134048_7794_T2", "SFRC01495S2_1537_T1",  "SOLACE2_0126S1_25285_T2",
+                                          "134169_6606_T2", "SFRC01865S1_T1_2422"),
+                               alt_name =  c("OVCAR8", "OVCAR8 LP A6-30","OVCAR8 LP H4-53", "UWB1", "UWB1+BRCA1", "WEHI CS62",
+                                          "PDX #11", "PDX #62", "PDX #585","PDX #428",
+                                          "PDX #48", "PDX #495",  "PDX #951",
+                                          "PDX #169", "PDX #865"))
+
+hom_me_list <- list("134011_1910_T4", "134062_9174_T4",  "WEHI_CS62", "OVCAR8_LP_A6_30","SFRC01585S1_2163_T3",  "OVCAR8_LP_H4_53")
+het_me_list <- list("SFRC01428S1_22235_T2", "134048_7794_T2", "SFRC01495S2_1537_T1", "OVCAR8", "SOLACE2_0126S1_25285_T2", "134169_6606_T2","SFRC01865S1_T1_2422")
+
+
+sig_change_palette <- c("Bi-Directional" = "#9c89b8", "Increase" = "#da627d", "Decrease" ="#62b6cb" , "No Change" ="grey")
 ```
 
-
 #General seq alt
-##isogenic sv extraction (DEL)
+
+blah ##isogenic sv extraction (DEL)
+
 ```{r collapse=T}
 # isogenic_sv <- fread(paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/somatic_SVs/severus_somatic.vcf"), skip = '#CHROM', fill=TRUE) %>%
 #   dplyr::rename(TUMOUR = 10) %>%
@@ -80,7 +98,8 @@ library(VennDiagram)
 
 ```
 
-### SV DEL 
+### SV DEL
+
 ```{r}
 DEL_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_read_mapping.RDS",
                                       T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_SV_modkit_extract.tsv",
@@ -98,7 +117,9 @@ DEL_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_
                                       type = "DEL")
 
 ```
+
 ####SV DEL overlap concordance
+
 ```{r}
 overlapped_DEL_pileup_filt <- isogenic_overlap_svs(DEL_reads_h453, DEL_reads_a630, type = "DEL")
 overlapped_DEL_pileup_filt%>%
@@ -107,14 +128,16 @@ overlapped_DEL_pileup_filt%>%
   stat_cor(label.y = c(1.05,1))+
   facet_wrap(~read_type)+
   theme_bw()+
-  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
-  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 A6-meth (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 H4-KO (%5mC)")+
   theme(strip.background = element_rect(fill = NA))
 ggsave("plots/del_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
 
 isogenic_overlap_svs_venn(DEL_reads_h453, DEL_reads_a630, type = "DEL", "plots/del_overlap_ovcar8s.tiff")
 ```
+
 ####SV DEL merge
+
 ```{r}
 overlapped_DEL_reads <- DEL_reads_h453 %>%
   dplyr::select(chrom, SV_start, SV_end_453 = SV_end, ID_h453 =ID, REF, ALT, SV_type, SV_len_h453 =SV_len ) %>%
@@ -207,9 +230,15 @@ plot_DEL_density <- plot_DEL%>%
   distinct() 
 
 plot_DEL_density$density <-get_density(plot_DEL_density$relat_pos, plot_DEL_density$diff, n =40)
+
+
+CpG_DEL_fisher %>%
+  group_by(ID) %>%
+  summarise(sig_n = sum(sig))
 ```
 
 ####plot SV DEL MERGE
+
 ```{r}
 
 plot_DEL_density%>%
@@ -384,7 +413,6 @@ chisq <- density_del %>%
   pivot_wider(values_from = n, names_from = changed) %>%
   column_to_rownames("adj_n_group")%>%
   chisq.test()
-chisq$
 
 density_del %>%
   mutate(adj_n_group = factor(adj_n_group, levels = c("0", "1", "2", ">=3"))) %>%
@@ -417,7 +445,9 @@ CpG_DEL_fisher %>%
 
 ggsave("plots/SV_del_changed_per_sample.pdf", height = 4, width = 7)
 ```
+
 ##isogenic sv extraction (INS)
+
 ```{r collapse=T}
 # source("scripts/meth_sv/sv_extract_support.R")
 # sample = "uwb1_brca1"
@@ -490,6 +520,7 @@ ggsave("plots/SV_del_changed_per_sample.pdf", height = 4, width = 7)
 ```
 
 ###SV INS
+
 ```{r}
 INS_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_INS_meth.RDS",
                                       T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_SV_modkit_extract.tsv",
@@ -507,7 +538,9 @@ INS_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_
                                       type = "INS")
 
 ```
+
 ####SV INS overlap concordance
+
 ```{r}
 overlapped_INS_pileup_filt <- isogenic_overlap_svs(INS_reads_h453, INS_reads_a630, type = "INS")
 
@@ -517,8 +550,8 @@ overlapped_INS_pileup_filt%>%
   stat_cor(label.y = c(1.05,1))+
   facet_wrap(~read_type)+
   theme_bw()+
-  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
-  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 A6-meth (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 H4-KO (%5mC)")+
   theme(strip.background = element_rect(fill = NA))
 ggsave("plots/del_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
 
@@ -526,6 +559,7 @@ isogenic_overlap_svs_venn(INS_reads_h453, INS_reads_a630, type = "INS", "plots/i
 ```
 
 ####SV INS merge
+
 ```{r}
 overlapped_INS_reads <- INS_reads_h453 %>%
   dplyr::select(chrom, SV_start, SV_end_453 = SV_end, ID_h453 =ID, REF, SV_type, SV_len_h453 =SV_len ) %>%
@@ -616,11 +650,11 @@ plot_INS_density <- plot_INS%>%
   mutate(diff = alt- ref) %>%
   distinct() 
 
-
 plot_INS_density$density <-get_density(plot_INS_density$relat_pos, plot_INS_density$diff, n =40)
 ```
 
 ####plot SV INS MERGE
+
 ```{r}
 plot_INS_density%>%
   left_join(CpG_INS_fisher) %>%
@@ -774,7 +808,9 @@ merged_INS %>%
 ggsave("plots/SV_INS_changed_per_sample.pdf", height = 4, width = 7)
 
 ```
+
 ##isogenic sv extraction (DUP)
+
 ```{r collapse=T}
 # source("scripts/meth_sv/sv_extract_support.R")
 # sample = "uwb1_brca1"
@@ -837,7 +873,7 @@ ggsave("plots/SV_INS_changed_per_sample.pdf", height = 4, width = 7)
 #   left_join(modkit_extract)
 # 
 # merged_DUP_reads <- DUP_reads %>%
-#   left_join(ins_shift %>%
+#   left_join(dup_shift %>%
 #               dplyr::select(read_id, forward_read_position, ID, shift_position)) %>%
 #   mutate(shift_position = case_when(ref_position != -1 & ref_position <= SV_start ~ ref_position,
 #                                     ref_position != -1 & ref_position > SV_start ~ ref_position+ SV_len,
@@ -847,7 +883,9 @@ ggsave("plots/SV_INS_changed_per_sample.pdf", height = 4, width = 7)
 # saveRDS(merged_DUP_reads, file = paste0( "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_",sample,"/", sample,"_DUP_meth.RDS"))
 
 ```
+
 ###SV DUP
+
 ```{r}
 DUP_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_DUP_meth.RDS",
                                       T_modkit_extract = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_merged_SV_modkit_extract.tsv",
@@ -866,8 +904,8 @@ DUP_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_
                                       type = "DUP")
 ```
 
+###DUP overlap concordance
 
-##DUP overlap concordance
 ```{r}
 overlapped_DUP_pileup_filt <- isogenic_overlap_svs(DUP_reads_h453, DUP_reads_a630, type = "DUP")
 
@@ -878,14 +916,16 @@ overlapped_DUP_pileup_filt%>%
   stat_cor(label.y = c(1.05,1))+
   facet_wrap(~read_type)+
   theme_bw()+
-  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
-  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 A6-meth (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 H4-KO (%5mC)")+
   theme(strip.background = element_rect(fill = NA))
 ggsave("plots/dup_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
 
 isogenic_overlap_svs_venn(DUP_reads_h453, DUP_reads_a630, type = "DUP", "plots/dup_overlap_ovcar8s.tiff")
 ```
+
 ####SV DUP merge
+
 ```{r}
 overlapped_DUP_reads <- DUP_reads_h453 %>%
   dplyr::select(chrom, SV_start, SV_end_453 = SV_end, ID_h453 =ID, REF, SV_type, SV_len_h453 =SV_len ) %>%
@@ -981,9 +1021,10 @@ plot_DUP_density <- plot_DUP%>%
 
 plot_DUP_density$density <-get_density(plot_DUP_density$relat_pos, plot_DUP_density$diff, n =80)
 ```
-####plot SV DUP MERGE
-```{r}
 
+####plot SV DUP MERGE
+
+```{r}
 plot_DUP_density%>%
   inner_join(CpG_DUP_fisher) %>%
   mutate(sig = factor(sig, levels = c("TRUE", "FALSE"))) %>%
@@ -1020,9 +1061,8 @@ plot_DUP_density%>%
 ggsave("plots/DUP_change_indv.pdf", width = 16, height = 14)
 ```
 
-
-
 ##isogenic sv extraction (BND)
+
 ```{r collapse=T}
 # source("scripts/meth_sv/sv_extract_support.R")
 # sample = "uwb1_brca1"
@@ -1122,7 +1162,8 @@ ggsave("plots/DUP_change_indv.pdf", width = 16, height = 14)
 
 ```
 
-###BND 
+###BND
+
 ```{r}
 BND_reads_a630 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_BND_alt_meth.RDS",
                                        T_read_ref_mapping_RDS = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/a630_BND_ref_meth.RDS",
@@ -1145,7 +1186,8 @@ BND_reads_uwb1_brca1 <- match_savana_bp_meth(T_read_mapping_RDS = "/working/lab_
 
 ```
 
-##BND overlap concordance
+#### BND overlap concordance
+
 ```{r}
 overlapped_BND_pileup_filt <- isogenic_overlap_svs(BND_reads_h453, BND_reads_a630, type = "BND")
 
@@ -1155,14 +1197,16 @@ overlapped_BND_pileup_filt%>%
   stat_cor(label.y = c(1.05,1))+
   facet_wrap(~read_type)+
   theme_bw()+
-  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
-  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 A6-meth (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 H4-KO (%5mC)")+
   theme(strip.background = element_rect(fill = NA))
 ggsave("plots/bnd_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
 
 isogenic_overlap_svs_venn(BND_reads_h453, BND_reads_a630, type = "BND", "plots/bnd_overlap_ovcar8s.tiff")
 ```
+
 ####SV BND merge
+
 ```{r}
 overlapped_BND_reads <- BND_reads_h453 %>%
   dplyr::select(chrom, SV_start, SV_end, ID_h453 =ID,  SV_type, SV_len_h453 =SV_len, chr_end) %>%
@@ -1256,7 +1300,9 @@ plot_BND_density <- plot_BND%>%
 
 plot_BND_density$density <-get_density(plot_BND_density$relat_pos, plot_BND_density$diff, n =40)
 ```
+
 ####plot SV BND MERGE
+
 ```{r}
 
 plot_BND_density%>%
@@ -1294,7 +1340,8 @@ ggsave("plots/BND_change_indv.pdf", width = 16, height = 14)
 ```
 
 ## isogenic INDEL extraction
-```{r}
+
+```{r collapse = T}
 
 # #ovcar8
 # isogenic_indel_ovcar8 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/clairs_to/indel.vcf.gz", skip = '#CHROM', fill=TRUE) %>%
@@ -1501,7 +1548,9 @@ ggsave("plots/BND_change_indv.pdf", width = 16, height = 14)
 # saveRDS(ins_uwb1_brca1_seq_df, "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_uwb1_brca1_seq_df.RDS")
 
 ```
-### INDEL DEL 
+
+### INDEL DEL
+
 ```{r}
 indel_del_a630 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_a630_seq_df.RDS",
                   "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_LP_A6_30_merged_SV_modkit_extract.tsv",
@@ -1520,14 +1569,14 @@ overlapped_indel_DEL_pileup_filt<- isogenic_overlap_svs(indel_del_h453 %>%
                                   dplyr::rename(SV_start = start, SV_end = end,  SV_len = indel_size, SV_type = type),
                      indel_del_a630 %>%
                                   dplyr::rename(SV_start = start, SV_end = end,  SV_len = indel_size, SV_type = type), "DEL")
-overlapped_DEL_pileup_filt%>%
+overlapped_indel_DEL_pileup_filt%>%
   ggplot(aes(x = `OVCAR8 LP A6-30`, y = `OVCAR8 LP H4-53`))+
   geom_point(alpha = 0.2)+
   stat_cor(label.y = c(1.05,1))+
   facet_wrap(~read_type)+
   theme_bw()+
-  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
-  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 A6-meth (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 H4-KO (%5mC)")+
   theme(strip.background = element_rect(fill = NA))
 ggsave("plots/indel_del_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
 
@@ -1536,6 +1585,7 @@ isogenic_overlap_indels_venn(indel_del_h453 ,
 ```
 
 ####indel DEL merge
+
 ```{r}
 overlapped_indel_del_reads <- indel_del_h453 %>%
   dplyr::select(chrom, start, end, ID_h453 =ID, REF, ALT, type, indel_size ) %>%
@@ -1626,9 +1676,19 @@ plot_indel_del_density <- plot_indel_del%>%
 
 plot_indel_del_density$density <-get_density(plot_indel_del_density$relat_pos, plot_indel_del_density$diff, n =80)
 
+
+CpG_DEL_fisher %>%
+  mutate(diff_dir = diff/diff) %>%
+  filter(diff >0) %>%
+  group_by(ID) %>%
+  summarise(n_sig = sum(sig)) %>%
+  filter(n_sig >0)
+
+
 ```
 
-####plot indel del merge 
+####plot indel del merge
+
 ```{r}
 plot_indel_del_density%>%
   left_join(CpG_indel_del_fisher) %>%
@@ -1647,6 +1707,7 @@ ggsave("plots/indel_del_change.png", width = 8, height = 4)
 ```
 
 ### INDEL INS
+
 ```{r}
 indel_ins_a630 <- match_clair3_meth("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_a630_seq_df.RDS",
                   "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_LP_A6_30_merged_SV_modkit_extract.tsv",
@@ -1671,8 +1732,8 @@ overlapped_INS_pileup_filt%>%
   stat_cor(label.y = c(1.05,1))+
   facet_wrap(~read_type)+
   theme_bw()+
-  scale_x_continuous(labels = scales::percent, "OVCAR8 LP A6-30 (%5mC)")+
-  scale_y_continuous(labels = scales::percent, "OVCAR8 LP H4-53 (%5mC)")+
+  scale_x_continuous(labels = scales::percent, "OVCAR8 A6-meth (%5mC)")+
+  scale_y_continuous(labels = scales::percent, "OVCAR8 H4-KO (%5mC)")+
   theme(strip.background = element_rect(fill = NA))
 ggsave("plots/indel_ins_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
 
@@ -1681,6 +1742,7 @@ isogenic_overlap_indels_venn(indel_ins_h453 ,
 ```
 
 ####indel INS merge
+
 ```{r}
 overlapped_indel_ins_reads <- indel_ins_h453 %>%
   dplyr::select(chrom, start, end, ID_h453 =ID, REF, ALT, type, indel_size ) %>%
@@ -1770,7 +1832,9 @@ plot_indel_ins_density <- plot_indel_ins%>%
 
 plot_indel_ins_density$density <-get_density(plot_indel_ins_density$relat_pos, plot_indel_ins_density$diff, n =60)
 ```
-####plot indel del merge 
+
+####plot indel del merge
+
 ```{r}
 plot_indel_ins_density%>%
   left_join(CpG_indel_ins_fisher) %>%
@@ -1788,7 +1852,72 @@ plot_indel_ins_density%>%
 ggsave("plots/indel_ins_change.png", width = 8, height = 4)
 ```
 
-#altered size assessment
+#altered SV investigation
+
+#permutation on distance to bp
+
+```{r}
+perm_del <- plot_indel_del %>%
+  filter(read_type == "alt") %>%
+  dplyr::select(ID, relat_pos, ref_position) %>%
+    left_join(CpG_indel_del_fisher %>%
+              dplyr::select(ID, ref_position, sig))
+
+
+obs_diff <- perm_del %>%
+  group_by(sig) %>%
+  summarise(mean_dist = mean(abs(relat_pos)), .groups = "drop") %>%
+  summarise(diff = diff(mean_dist)) %>%
+  pull(diff)
+
+
+set.seed(123)
+library(coin)
+perm_test <- oneway_test(abs(perm_del$relat_pos) ~ factor(perm_del$sig),
+                         distribution = approximate(B = 100000)) # 100k permutations
+
+pvalue(perm_test)
+
+```
+
+```{r}
+del_len <- rbind(CpG_indel_del_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+          mutate(type = "INDEL"),
+      CpG_DEL_fisher%>%
+        dplyr::rename(alt_len = SV_len) %>%
+          mutate(type = "SV")) %>%
+  mutate(Group = "Deletion") %>%
+  rbind(rbind(CpG_indel_ins_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+          mutate(type = "INDEL"),
+        CpG_INS_fisher%>%
+        dplyr::rename(alt_len = SV_len) %>%
+          mutate(type = "SV")) %>%
+          mutate(Group = "Insertion")) %>%
+  rbind(CpG_DUP_fisher%>%
+        dplyr::rename(alt_len = SV_len)%>%
+          mutate(type = "SV", Group = "Duplication")) %>%
+  mutate(Group = factor(Group),
+         Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+                           Sample = factor(Sample),
+         starting =if_else(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8, "Ref Methylated", "Ref Unmethylated" ),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  group_by(ID, alt_len, Group, type, Sample, starting) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")) %>%
+  ungroup()%>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change")))
+
+```
+
+##subtype
+
 ```{r}
 rbind(CpG_indel_del_fisher %>%
         dplyr::rename(alt_len = indel_size) %>%
@@ -1801,25 +1930,75 @@ rbind(CpG_indel_del_fisher %>%
                            str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
                            str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
                            str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample),
+         starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(ID, alt_len, Group, type, Sample, starting) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease",
+                                   TRUE ~ "No Change")) %>%
+  ungroup() %>%
+  group_by(type, Sample, changed, starting) %>%
+  summarise(count = n()) %>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", 
+                                              "No Change")))  %>%
+  ggplot(aes(x = type, fill = changed, y = count))+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
+  geom_text(aes(label = paste0("N= ", count)),
+             position=  position_fill(vjust = 0.5))+
+  facet_grid(cols = vars(Sample), rows = vars(starting))+
+  theme_bw()+
+  xlab("Deletion Type")+
+  scale_fill_manual(values = sig_change_palette, "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Event with methylation change")+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
+
+
+ggsave("plots/breakdown_Deletion_type_dir.pdf", width = 10, height =4)
+
+
+rbind(CpG_indel_del_fisher %>%
+        filter(Meth_ref/(Unmeth_ref+Meth_ref)>=0.8) %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "INDEL"),
+      CpG_DEL_fisher%>%
+        filter(Meth_ref/(Unmeth_ref+Meth_ref)>=0.8) %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")) %>%
+  mutate(Group = "Deletion",
+         Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
          Sample = factor(Sample))  %>%
   group_by(ID, alt_len, Group, type, Sample) %>%
-  summarise(changed = sum(sig)>0) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                 Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "No Change (Meth)",
+                                   TRUE ~ "No Change (Unmeth)")) %>%
   ungroup() %>%
   group_by(type, Sample, changed) %>%
   summarise(count = n()) %>%
-  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change (Meth)",
+                                              "No Change (Unmeth)")))  %>%
   ggplot(aes(x = type, fill = changed, y = count))+
-  geom_bar(stat = "identity", position = "fill")+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
   geom_text(aes(label = paste0("N= ", count)),
              position=  position_fill(vjust = 0.5))+
   facet_wrap(~Sample, ncol = 4)+
   theme_bw()+
   xlab("Deletion Type")+
-  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
-  scale_y_continuous(labels = scales::percent, "Proportion")+
+  scale_fill_manual(values = sig_change_palette, "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Event with methylation change")+
   theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
 
-ggsave("plots/breakdown_Deletion_type.pdf", width = 10, height =4)
+
+
 
 rbind(CpG_indel_ins_fisher %>%
          dplyr::rename(alt_len = indel_size) %>%
@@ -1829,28 +2008,37 @@ rbind(CpG_indel_ins_fisher %>%
         mutate(type = "SV")) %>%
   mutate(Group = "Deletion",
          Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
-                           str_detect(ID, "_a630$") ~"OVCAR8",
-                           str_detect(ID, "_h453$") ~"OVCAR8",
-                           str_detect(ID, "_common$") ~"OVCAR8"),
-         Sample = factor(Sample))  %>%
-  group_by(ID, alt_len, Group, type, Sample) %>%
-  summarise(changed = sum(sig)>0) %>%
+                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample),
+         starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(ID, alt_len, Group, type, Sample, starting) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease",
+                                   TRUE ~ "No Change")) %>%
   ungroup() %>%
-  group_by(type, Sample, changed) %>%
+  group_by(type, Sample, changed, starting) %>%
   summarise(count = n()) %>%
-  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", 
+                                              "No Change")))  %>%
   ggplot(aes(x = type, fill = changed, y = count))+
-  geom_bar(stat = "identity", position = "fill")+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
   geom_text(aes(label = paste0("N= ", count)),
              position=  position_fill(vjust = 0.5))+
-  facet_wrap(~Sample, ncol = 4)+
+  facet_grid(cols = vars(Sample), rows = vars(starting))+
   theme_bw()+
   xlab("Insertion Type")+
-  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
-  scale_y_continuous(labels = scales::percent, "Proportion")+
+  scale_fill_manual(values = sig_change_palette, "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Event with methylation change")+
   theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
 
-ggsave("plots/breakdown_Insertion_type.pdf", width = 10, height =4)
+ggsave("plots/breakdown_Insertion_type_dir.pdf", width = 10, height =4)
 
 
 CpG_DUP_fisher%>%
@@ -1861,29 +2049,38 @@ CpG_DUP_fisher%>%
                            str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
                            str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
                            str_detect(ID, "_common$") ~"OVCAR8 common"),
-         Sample = factor(Sample))  %>%
-  group_by(ID, alt_len, Group, type, Sample) %>%
-  summarise(changed = sum(sig)>0) %>%
+         Sample = factor(Sample),
+        starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(ID, alt_len, Group, type, Sample, starting) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease",
+                                   TRUE ~ "No Change")) %>%
   ungroup() %>%
-  group_by(type, Sample, changed) %>%
+  group_by(type, Sample, changed, starting) %>%
   summarise(count = n()) %>%
-  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", 
+                                              "No Change")))  %>%
   ggplot(aes(x = type, fill = changed, y = count))+
-  geom_bar(stat = "identity", position = "fill")+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
   geom_text(aes(label = paste0("N= ", count)),
              position=  position_fill(vjust = 0.5))+
-  facet_wrap(~Sample, ncol = 4)+
+  facet_grid(cols = vars(Sample), rows = vars(starting))+
   theme_bw()+
   xlab("Duplication")+
-  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
-  scale_y_continuous(labels = scales::percent, "Proportion")+
+  scale_fill_manual(values = sig_change_palette, "CpG changed (N>=1)")+
+  scale_y_continuous(labels = scales::percent, "Event with methylation change")+
   theme(legend.position = "bottom", strip.background = element_rect(fill = NA),
         axis.title.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank())+
   ggtitle("Duplication")
 
-ggsave("plots/breakdown_duplication_type.pdf", width = 7, height =4)
+ggsave("plots/breakdown_duplication_type_dir.pdf", width = 7, height =4)
 
 
 
@@ -1894,107 +2091,215 @@ CpG_BND_fisher%>%
                            str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
                            str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
                            str_detect(ID, "_common$") ~"OVCAR8 common"),
-         Sample = factor(Sample))  %>%
-  group_by(ID,  Group, type, Sample) %>%
-  summarise(changed = sum(sig)>0) %>%
+         Sample = factor(Sample),
+         starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(ID,  Group, type, Sample, starting) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease",
+                                   TRUE ~ "No Change")) %>%
   ungroup() %>%
-  group_by(type, Sample, changed) %>%
+  group_by(type, Sample, changed, starting) %>%
   summarise(count = n()) %>%
-  mutate(changed = factor(changed, levels = c("TRUE", "FALSE"))) %>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", 
+                                              "No Change")))  %>%
   ggplot(aes(x = type, fill = changed, y = count))+
-  geom_bar(stat = "identity", position = "fill")+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
   geom_text(aes(label = paste0("N= ", count)),
              position=  position_fill(vjust = 0.5))+
-  facet_wrap(~Sample, ncol = 4)+
+  facet_grid(cols = vars(Sample), rows = vars(starting))+
   theme_bw()+
   xlab("Duplication")+
-  scale_fill_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
-  scale_y_continuous(labels = scales::percent, "Proportion")+
+  scale_fill_manual(values = sig_change_palette, "CpG changed (N>=1)", limits = force)+
+  scale_y_continuous(labels = scales::percent, "Event with methylation change")+
   theme(legend.position = "bottom", strip.background = element_rect(fill = NA),
         axis.title.x = element_blank(),
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank())+
   ggtitle("Translocation")
 
-ggsave("plots/breakdown_translocation_type.pdf", width = 7, height =4)
+ggsave("plots/breakdown_translocation_type_dir.pdf", width = 7, height =4)
 
-del_len <- rbind(CpG_indel_del_fisher %>%
-        dplyr::rename(alt_len = indel_size),
-      CpG_DEL_fisher%>%
-        dplyr::rename(alt_len = SV_len)) %>%
-  mutate(Group = "Deletion") %>%
-  rbind(rbind(CpG_indel_ins_fisher %>%
-        dplyr::rename(alt_len = indel_size),
-        CpG_INS_fisher%>%
-        dplyr::rename(alt_len = SV_len)) %>%
-          mutate(Group = "Insertion")) %>%
-  mutate(Group = factor(Group)) %>%
-  group_by(ID, alt_len, Group) %>%
-  summarise(n = sum(sig)>0) %>%
-  mutate(Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
-                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
-                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
-                           str_detect(ID, "_common$") ~"OVCAR8 common"),
-         Sample = factor(Sample)) 
+```
 
+##length
 
-del_len %>%
-  filter(Group == "Deletion") %>%
-  mutate(n = factor(n, levels = c("TRUE", "FALSE")),
-         Sample = factor(Sample, levels = c("OVCAR8 common", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53", "UWB1 BRCA1"))) %>%
-  ggplot(aes(x = n, y = alt_len, color = n))+
-  geom_violin()+
-  facet_wrap(~Sample, ncol = 4)+
-  scale_color_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
-  stat_summary(fun = "median",
-               geom = "crossbar", 
+```{r}
+
+##deletion
+manual_stat <- compare_means(data = del_len%>%
+                               filter(Group == "Deletion")  %>%
+                               group_by(changed, type, starting) %>%
+                               filter(n()>2) , formula = alt_len ~changed, group.by = c("type" ,"starting"),
+                             ref.group = "No Change", method = "wilcox.test") %>%
+  mutate(p.signif = if_else(p <=0.05, as.character(p.format), "ns")) %>%
+  group_by(type, starting) %>%
+  mutate(y.position = if_else(type == "SV", 6, 48+ 5* (row_number()-1))) %>%
+  ungroup()
+  
+
+SV_len_plot <- del_len %>%
+  filter(Group == "Deletion", type == "SV") %>%
+  ggplot( aes(x = changed, y = alt_len, color = changed))+
+  geom_beeswarm(, size = 0.5)+
+  geom_violin(data = .%>%
+                group_by(Group, Sample,  changed) %>%
+                filter(n_distinct(ID)>2),
+              fill= NA)+
+  scale_color_manual(values = sig_change_palette, "Direction of Change")+
+  stat_pvalue_manual(manual_stat %>%
+                       filter(type == "SV"), label = "p.signif")+
+  stat_compare_means()+
+  facet_wrap(~starting, ncol = 4,scales = "free_x")+
+  stat_summary(data = .%>%
+                group_by(Group, Sample,  changed) %>%
+                filter(n_distinct(ID)>2),
+               fun = "median",
+               color = "black",
+               geom = "crossbar",
                width = 0.1)+
-  stat_compare_means(comparisons = list(c("TRUE", "FALSE")))+
   scale_y_log10("Length of deletion (bp)")+
+   xlab("Change in Significant CpG")+
   theme_bw()+
-  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
-ggsave("plots/breakdown_Deletion_length.pdf", width = 10, height =4)
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA), 
+        axis.text.x = element_text(angle = 30 , vjust = 0.5))
+
+indel_len_plot <- del_len %>%
+  filter(Group == "Deletion", type == "INDEL") %>%
+  ggplot( aes(x = changed, y = alt_len, color = changed))+
+  geom_beeswarm(data = . %>%
+                  filter(changed != "No Change"), size = 0.5)+
+  geom_violin(data = .%>%
+                group_by(Group, changed) %>%
+                filter(n_distinct(ID)>2),
+              fill= NA)+
+  scale_color_manual(values = sig_change_palette, "Direction of Change")+
+  stat_pvalue_manual(manual_stat %>%
+                       filter(type == "INDEL"), label = "p.signif")+
+  facet_wrap(~starting, ncol = 4,scales = "free_x")+
+  stat_summary(data = .%>%
+                group_by(Group, changed) %>%
+                filter(n_distinct(ID)>2),
+               fun = "median",
+               color = "black",
+               geom = "crossbar",
+               width = 0.1)+
+  ylab("Length of deletion (bp)")+
+  xlab("Change in Significant CpG")+
+  theme_bw()+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA), 
+        axis.text.x = element_text(angle = 30 , vjust = 0.5))
+
+ggarrange(indel_len_plot,
+          SV_len_plot,
+          nrow =1, common.legend = T, legend = "bottom")
+ggsave("plots/breakdown_Deletion_length.pdf", width = 11, height =4)
+
+##insertion
+
+indel_len_plot <- del_len %>%
+  filter(Group == "Insertion", type == "INDEL") %>%
+  ggplot( aes(x = changed, y = alt_len, color = changed))+
+  geom_beeswarm(data = . %>%
+                  filter(changed != "No Change"),size = 0.5)+
+  geom_violin(data = .%>%
+                group_by(Group, changed) %>%
+                filter(n_distinct(ID)>2),
+              fill= NA)+
+  scale_color_manual(values = sig_change_palette, "Direction of Change")+
+  facet_wrap(~starting , ncol = 4,scales = "free_x")+
+  stat_compare_means(data = .%>%
+                      group_by(changed) %>%
+                       filter(n()>2), comparisons = list(c("Decrease", "No Change")))+
+  stat_summary(data = .%>%
+                group_by(Group, changed) %>%
+                filter(n_distinct(ID)>2),
+               fun = "median",
+               color = "black",
+               geom = "crossbar",
+               width = 0.1)+
+  ylab("Length of Insertion (bp)")+
+  xlab("Change in Significant CpG")+
+  theme_bw()+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA), 
+        axis.text.x = element_text(angle = 30 , vjust = 0.5))
+
+
+SV_len_plot <- del_len %>%
+  filter(Group == "Insertion", type == "SV") %>%
+  ggplot( aes(x = changed, y = alt_len, color = changed))+
+  geom_beeswarm(size = 0.5)+
+  geom_violin(data = .%>%
+                group_by(Group,  changed) %>%
+                filter(n_distinct(ID)>2),
+              fill= NA)+
+  scale_color_manual(values = sig_change_palette, "Direction of Change")+
+   facet_wrap(~starting , ncol = 4,scales = "free_x")+
+  stat_summary(data = .%>%
+                group_by(Group,   changed) %>%
+                filter(n_distinct(ID)>2),
+               fun = "median",
+               color = "black",
+               geom = "crossbar",
+               width = 0.1)+
+  scale_y_log10("Length of insertion (bp)")+
+   xlab("Change in Significant CpG")+
+  theme_bw()+
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA), 
+        axis.text.x = element_text(angle = 30 , vjust = 0.5))
+ggarrange(indel_len_plot,
+          SV_len_plot,
+          ncol =2, common.legend = T, legend = "bottom")
+ggsave("plots/breakdown_Insertion_length.pdf", width = 11, height =4)
+
+
+
+manual_stat <- compare_means(data = del_len%>%
+                               filter(Group == "Duplication", type == "SV")  %>%
+                               group_by(changed, type, starting) %>%
+                               filter(n()>2) , formula = alt_len ~changed, group.by = c("type" ,"starting"),
+                             ref.group = "No Change", method = "wilcox.test") %>%
+  mutate(p.signif = if_else(p <=0.05, as.character(p.format), "ns")) %>%
+  group_by(type, starting) %>%
+  mutate(y.position = log10(4304968+2)) %>%
+  ungroup()
+  
+
 
 del_len %>%
-  filter(Group == "Insertion") %>%
-  mutate(n = factor(n, levels = c("TRUE", "FALSE")),
-         Sample = factor(Sample, levels = c("OVCAR8 common", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53", "UWB1 BRCA1"))) %>%
-  ggplot(aes(x = n, y = alt_len, color = n))+
-  geom_beeswarm()+
-  facet_wrap(~Sample, ncol = 4)+
-  scale_color_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
-  stat_compare_means(comparisons = list(c("TRUE", "FALSE")))+
-  scale_y_log10("Length of Insertion (bp)")+
-  theme_bw()+
-  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
-ggsave("plots/breakdown_Insertion_length.pdf", width = 10, height =4)
-
-CpG_DUP_fisher%>%
-        dplyr::rename(alt_len = SV_len)%>%
-          mutate(Group = "Insertion") %>%
-  mutate(Group = factor(Group)) %>%
-  group_by(ID, alt_len, Group) %>%
-  summarise(n = sum(sig)>0) %>%
-  mutate(Sample =case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
-                           str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
-                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
-                           str_detect(ID, "_common$") ~"OVCAR8 common"),
-         Sample = factor(Sample)) %>%
-  mutate(n = factor(n, levels = c("TRUE", "FALSE")),
-         Sample = factor(Sample, levels = c("OVCAR8 common", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53", "UWB1 BRCA1"))) %>%
-  ggplot(aes(x = n, y = alt_len, color = n))+
-  geom_beeswarm()+
-  facet_wrap(~Sample, ncol = 4)+
-  scale_color_manual(values = c( "#bb4430","grey"), "CpG changed (N>=1)")+
-  stat_compare_means(comparisons = list(c("TRUE", "FALSE")))+
+  filter(Group == "Duplication", type == "SV") %>%
+  ggplot( aes(x = changed, y = alt_len, color = changed))+
+  
+  geom_violin(data = .%>%
+                group_by(Group,  changed) %>%
+                filter(n_distinct(ID)>2),
+              fill= NA)+
+  scale_color_manual(values = sig_change_palette, "Direction of Change")+
+stat_pvalue_manual(manual_stat, label = "p.signif")+
+   facet_wrap(~starting, ncol = 4,scales = "free_x")+
+  stat_summary(data = .%>%
+                group_by(Group,  changed) %>%
+                filter(n_distinct(ID)>2),
+               fun = "median",
+               color = "black",
+               geom = "crossbar",
+               width = 0.1)+
+  geom_beeswarm(size = 0.5)+
   scale_y_log10("Length of Duplication (bp)")+
+   xlab("Change in Significant CpG")+
   theme_bw()+
-  theme(legend.position = "bottom", strip.background = element_rect(fill = NA))
-ggsave("plots/breakdown_Duplication_length.pdf", width = 10, height =4)
+  theme(legend.position = "bottom", strip.background = element_rect(fill = NA), 
+        axis.text.x = element_text(angle = 30 , vjust = 0.5))
+
+ggsave("plots/breakdown_Duplication_length.pdf", width = 6, height =5
+       )
 
 
-# 
-# 
+
 # model <- glm(n ~ alt_len , data = del_len, family = binomial(link = "logit"))
 # summary(model)
 # 
@@ -2023,10 +2328,109 @@ ggsave("plots/breakdown_Duplication_length.pdf", width = 10, height =4)
 #   ylab("Probably of Significant Change")
 # ggsave("plots/logisticreg_changed_size.pdf", height = 4, width = 10)
 
-```
-##CpG density 
-```{r}
+del_len %>%
+  filter(Group == "Deletion", type == "INDEL")  %>%
+  group_by(starting, changed) %>%
+  summarise(alt_len = median(alt_len))
 
+```
+
+#breakpoint annotation
+
+```{r}
+alt_combined <- rbind(plot_DEL_density%>%
+  left_join(CpG_DEL_fisher) %>%
+    dplyr::rename(alt_start = SV_start, alt_end = SV_end, alt_len = SV_len) %>%
+    mutate(starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(chrom, alt_start, alt_end, alt_len, ID, starting) %>%
+  summarise(changed  = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")),
+  plot_indel_del_density %>%
+  left_join(CpG_indel_del_fisher) %>%
+    dplyr::rename(alt_start = start, alt_end = end, alt_len = indel_size) %>%
+    mutate(starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+    group_by(chrom, alt_start, alt_end, alt_len, ID, starting) %>%
+    summarise(changed  = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")) ) %>%
+  mutate(alt_type = "DEL") %>%
+  rbind(rbind(plot_INS_density%>%
+  left_join(CpG_INS_fisher) %>%
+    dplyr::rename(alt_start = SV_start, alt_end = SV_end, alt_len = SV_len) %>%
+    mutate(starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(chrom, alt_start, alt_end, alt_len, ID, starting) %>%
+  summarise(changed  = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")),
+  plot_indel_ins_density %>%
+  left_join(CpG_indel_ins_fisher) %>%
+    dplyr::rename(alt_start = start, alt_end = end, alt_len = indel_size) %>%
+    mutate(starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+    group_by(chrom, alt_start, alt_end, alt_len, ID, starting) %>%
+    summarise(changed  = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")) ) %>%
+  mutate(alt_type = "INS")) %>%
+  rbind(plot_DUP_density %>%
+         left_join(CpG_DUP_fisher) %>%
+          dplyr::rename(alt_start = SV_start, alt_end = SV_end, alt_len = SV_len) %>%
+          mutate(starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(chrom, alt_start, alt_end, alt_len, ID, starting) %>%
+  summarise(changed  = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change"))%>%
+  mutate(alt_type = "DUP") ) %>%
+  rbind(plot_BND_density %>%
+         left_join(CpG_BND_fisher) %>%
+          mutate(SV_len = 0) %>%
+          dplyr::rename(alt_start = SV_start, alt_end = SV_end, alt_len = SV_len) %>%
+          mutate(starting =case_when(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8 ~ "Ref Methylated",
+                             Meth_ref/ (Meth_ref +Unmeth_ref) <= 0.2 ~ "Ref Unmethylated",
+                             TRUE ~NA),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated")))  %>%
+  filter(!is.na(starting)) %>%
+  group_by(chrom, alt_start, alt_end, alt_len, ID, starting) %>%
+  summarise(changed  = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change"))%>%
+  mutate(alt_type = "BND") ) %>%
+  ungroup()%>%
+  mutate(SampleID = case_when(str_detect(ID, "_h4") ~ "OVCAR8 LP H4-53",
+                             str_detect(ID, "_a6") ~ "OVCAR8 LP A6-30", 
+                             str_detect(ID, "_co") ~ "OVCAR8 common",
+                             str_detect(ID, "_U") ~ "UWB1 BRCA1"))
+```
+
+##CGI
+
+```{r}
 isl_annot <- fread("ref/cpg_islands_ucsc.bed") %>%
   dplyr::select(chrom, chromStart, chromEnd) 
 
@@ -2036,15 +2440,340 @@ isl_complete <- isl_annot %>%
   rbind(., isl_annot %>%mutate(chromStart = chromEnd, chromEnd = chromEnd + 2000,, type = "Shore")) %>%
   rbind(., isl_annot %>%mutate(chromEnd = chromStart- 2000, chromStart = chromStart - 4000,, type = "Shelf")) %>%
   rbind(., isl_annot %>%mutate(chromStart = chromEnd+2000, chromEnd = chromEnd + 4000,, type = "Shelf"))
-CpG_sites <-c(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/*_modkit_extract.tsv"),Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/*/*_merged_SV_modkit_extract.tsv")) %>%
-  map_dfr(~fread(.x) %>%
-            dplyr::select(chrom, ref_position, ref_strand)) %>%
-  mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position )) %>%
-  distinct()
+
+
+alt_combined_annot <- alt_combined %>%
+  dplyr::select(chrom, bp = alt_start, ID, alt_type, changed, alt_len, starting) %>%
+  left_join(isl_complete, by = join_by(chrom == chrom, bp <= chromEnd, bp >=chromStart)) %>%
+    mutate(pos = "bp_1")%>%
+  rbind(alt_combined %>%
+          filter(alt_start != alt_end, !alt_type %in% c("BND", "INS")) %>%
+  dplyr::select(chrom, bp = alt_end, ID, alt_type, changed, alt_len,  starting) %>%
+  left_join(isl_complete, by = join_by(chrom == chrom, bp <= chromEnd, bp >=chromStart)) %>%
+    mutate(pos = "bp_2")) %>%
+  mutate(type = if_else(is.na(type), "OpenSea", type)) %>%
+  group_by(chrom, bp, pos, ID, changed, alt_type, starting) %>%
+  summarise(type = paste(unique(type), collapse = ", ")) %>%
+  ungroup() %>%
+  mutate(priority_type = case_when(str_detect(type, "Island") ~ "Island",
+                                   str_detect(type, "Shore") ~ "Shore",
+                                    str_detect(type, "Shelf") ~ "Shelf",
+                                    TRUE~ "OpenSea"))
+
+cgi_palette = c("Island" = "#C1A17A", "Shore" = "#EED7B5", "Shelf" = "#9AD3C2",
+                "OpenSea" = "#A3C7E6")
+alt_combined_annot %>%
+  group_by(changed, priority_type, starting) %>%
+  summarise(subtype_n = n()) %>%
+  ungroup() %>%
+  mutate(priority_type = factor(priority_type, levels = c("Island", "Shore", "Shelf", "OpenSea")),
+         changed = factor(changed)) %>%
+  ggplot(aes(x = changed, y= subtype_n , fill = priority_type))+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
+  geom_text(aes(label = paste0("N=", subtype_n)), position =position_fill(vjust = 0.5) )+
+  scale_fill_manual(values = cgi_palette, "CGI Context")+
+  scale_y_continuous(labels = scales::percent, "Sequence alteration breakpoints")+
+  theme_bw()+
+    facet_wrap(~starting, scales = "free_x")+
+  xlab("From events with CpG changed (N>=1)")+
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = NA))
+ggsave("plots/all_break_points_cgi_context.pdf", height = 5, width = 7)
+
+
+library(VGAM) 
+alt_combined_annot <- alt_combined_annot %>%
+  mutate(changed = if_else(changed == "No Change", "No Change","Change")) %>%
+  mutate(changed = factor(changed, levels = c("No Change", "Change")),
+         starting = factor(starting, levels = c("Ref Unmethylated", "Ref Methylated")),
+         priority_type = factor(priority_type, levels = c("OpenSea", "Shelf", "Island", "Shore"  )))
+fit <- vglm(changed ~starting + priority_type, family = multinomial, data = alt_combined_annot)
+summary(fit)
+
+
+# CpG_sites <-c(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/*_modkit_extract.tsv"),Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/*/*_merged_SV_modkit_extract.tsv")) %>%
+#   map_dfr(~fread(.x) %>%
+#             dplyr::select(chrom, ref_position, ref_strand)) %>%
+#   mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position )) %>%
+#   distinct()
+#   
+```
+
+##promoter gene body
+
+```{r}
+promoter <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/EDPnew_20240409.bed")
+gene_body <- fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/supporting/MANE.GRCh38.v1.3.ensembl_genomic_transcript.gtf") %>%
+  dplyr::select(CHR =V1, chromStart = V4, chromEnd = V5)
+gene_annotation <- rbind(promoter %>%
+                           dplyr::select(chrom = `#chrom`, chromStart, chromEnd) %>%
+                           mutate(type = "Promoter"),
+                         gene_body %>%
+                           dplyr::rename(chrom = CHR) %>%
+                           mutate(type = "Gene Body"))
+
+alt_combined_annot_GENE <- alt_combined %>%
+  dplyr::select(chrom, bp = alt_start, ID, alt_type, changed, alt_len, starting) %>%
+  left_join(gene_annotation, by = join_by(chrom == chrom, bp <= chromEnd, bp >=chromStart)) %>%
+    mutate(pos = "bp_1")%>%
+  rbind(alt_combined %>%
+          filter(alt_start != alt_end, !alt_type %in% c("BND", "INS")) %>%
+  dplyr::select(chrom, bp = alt_end, ID, alt_type, changed, alt_len, starting) %>%
+  left_join(gene_annotation, by = join_by(chrom == chrom, bp <= chromEnd, bp >=chromStart)) %>%
+    mutate(pos = "bp_2")) %>%
+  mutate(type = if_else(is.na(type), "Intergenic", type)) %>%
+  group_by(chrom, bp, pos, ID, changed, alt_type, starting) %>%
+  summarise(type = paste(unique(type), collapse = ", ")) %>%
+  ungroup() %>%
+  mutate(priority_type = case_when(str_detect(type, "Promoter") ~ "Promoter",
+                                   str_detect(type, "Gene Body") ~ "Gene Body",
+                                    TRUE~ "Intergenic"))
+  alt_combined_annot_GENE %>%
+  group_by(changed, priority_type, starting) %>%
+  summarise(subtype_n = n()) %>%
+  ungroup() %>%
+  mutate(priority_type = factor(priority_type, levels = c("Promoter", "Gene Body", "Intergenic")),
+         changed = factor(changed)) %>%
+  ggplot(aes(x = changed, y= subtype_n , fill = priority_type))+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
+  geom_text(aes(label = paste0("N=", subtype_n)), position =position_fill(vjust = 0.5) )+
+  scale_fill_manual(values =c("Promoter"= "#7d4f50", "Gene Body" = "#cc8b86", "Intergenic" ="#f9eae1"), "Gene Context")+
+  scale_y_continuous(labels = scales::percent, "Sequence alteration breakpoints")+
+  theme_bw()+
+    facet_wrap(~starting, scales = "free_x")+
+  xlab("From events with CpG changed (N>=1)")+
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = NA))
+  
+ggsave("plots/all_break_points_gene_context.pdf", height = 5, width = 7)
+  
   
 
 
-### motif investigation
+
+```
+
+## adjcent ERV
+
+```{r}
+re_annotation <-fread("ref/rmsk.txt")%>%
+  dplyr::select(chrom = V6, rmsk_start = V7, rmsk_end = V8,  rmsk_class = V12) 
+ 
+alt_combined_annot_rmsk <- alt_combined %>%
+  dplyr::select(chrom, bp = alt_start, ID, alt_type, changed, alt_len, starting) %>%
+  left_join(re_annotation, by = join_by(chrom == chrom, bp >= rmsk_start, bp <=rmsk_end)) %>%
+    mutate(pos = "bp_1")%>%
+  rbind(alt_combined %>%
+          filter(alt_start != alt_end, !alt_type %in% c("BND", "INS")) %>%
+  dplyr::select(chrom, bp = alt_end, ID, alt_type, changed, alt_len, starting) %>%
+  left_join(re_annotation, by = join_by(chrom == chrom, bp >= rmsk_start, bp <=rmsk_end)) %>%
+    mutate(pos = "bp_2")) %>%
+  group_by(chrom, bp, pos, ID, changed, alt_type, starting) %>%
+  summarise(rmsk_class = paste(unique(rmsk_class), collapse = ", ")) %>%
+  ungroup() %>%
+  mutate(priority_type = case_when(str_detect(rmsk_class, "LINE") ~ "LINE",
+                                   str_detect(rmsk_class, "SINE") ~ "SINE",
+                                    str_detect(rmsk_class, "LTR") ~ "LTR",
+                                   str_detect(rmsk_class, "DNA") ~ "DNA",
+                                    TRUE~ "NA"))
+
+
+alt_combined_annot_rmsk %>%
+  mutate(priority_type = factor(priority_type , levels = c("LINE", "SINE", "LTR", "DNA", "NA"))) %>%
+  group_by(changed, priority_type, starting ) %>%
+  summarise(subtype_n = n()) %>%
+  ungroup() %>%
+  mutate(changed = factor(changed)) %>%
+  ggplot(aes(x = changed, y= subtype_n , fill = priority_type ))+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
+  geom_text(aes(label = paste0("N=", subtype_n)), position =position_fill(vjust = 0.5) )+
+  scale_fill_manual(values = c("#335c67", "#fff3b0", "#e09f3e", "#9e2a2b", "grey"), "Repeat Elements")+
+  scale_y_continuous(labels = scales::percent, "Sequence alteration breakpoints")+
+  theme_bw()+
+  facet_wrap(~starting, scales = "free_x")+
+  xlab("From events with CpG changed (N>=1)")+
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = NA))
+
+  ggsave("plots/all_break_points_RE.pdf", height = 5, width = 7)
+  
+
+
+```
+
+##adjacent lncRNA
+
+```{r}
+lncRNA_annotation <-fread("ref/lncipedia_5_2_hc_hg38.bed")%>%
+  dplyr::select(chrom = V1, start = V2, end = V3,  name = V4) 
+ 
+alt_combined_annot_lnc <- alt_combined %>%
+  dplyr::select(chrom, bp = alt_start, ID, alt_type, changed, alt_len, SampleID, starting) %>%
+  left_join(lncRNA_annotation, by = join_by(chrom == chrom, bp >= start, bp <=end)) %>%
+    mutate(pos = "bp_1")%>%
+  rbind(alt_combined %>%
+          filter(alt_start != alt_end, !alt_type %in% c("BND", "INS")) %>%
+  dplyr::select(chrom, bp = alt_end, ID, alt_type, changed, alt_len, SampleID, starting) %>%
+  left_join(lncRNA_annotation, by = join_by(chrom == chrom, bp >= start, bp <=end)) %>%
+    mutate(pos = "bp_2")) %>%
+  group_by(chrom, bp, pos, ID, changed, alt_type, SampleID, starting) %>%
+  summarise(name = paste(unique(name), collapse = ", ")) %>%
+  mutate(lncRNA = name != "NA")
+  # ungroup() %>%
+  # mutate(priority_type = case_when(str_detect(rmsk_class, "LINE") ~ "LINE",
+  #                                  str_detect(rmsk_class, "SINE") ~ "SINE",
+  #                                   str_detect(rmsk_class, "LTR") ~ "LTR",
+  #                                  str_detect(rmsk_class, "DNA") ~ "DNA",
+  #                                   TRUE~ "NA"))
+
+
+alt_combined_annot_lnc %>%
+  group_by(changed, lncRNA, starting) %>%
+  summarise(subtype_n = n()) %>%
+  ungroup() %>%
+  mutate(changed = factor(changed),
+         lncRNA = factor(lncRNA, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(x = changed, y= subtype_n , fill = lncRNA ))+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
+  geom_text(aes(label = paste0("N=", subtype_n)), position =position_fill(vjust = 0.5) )+
+  scale_fill_manual(values = c("#2a9d8f", "grey"), "BP overlapped with LncRNA")+
+  scale_y_continuous(labels = scales::percent, "Sequence alteration breakpoints")+
+  theme_bw()+
+  facet_wrap(~starting, scales = "free_x")+
+  xlab("From events with CpG changed (N>=1)")+
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = NA))
+
+  ggsave("plots/all_break_points_lncRNA.pdf", height = 5, width = 7)
+
+```
+
+##regression
+```{r}
+library(VGAM) 
+alt_combined_annot_Gene <- alt_combined_annot %>%
+  dplyr::select(chrom, bp,  ID, changed, alt_type, alt_type, starting, CGI = priority_type) %>%
+  full_join(alt_combined_annot_GENE %>%
+              dplyr::select(chrom, bp, ID, changed, alt_type, alt_type, starting, gene_context = priority_type) ) %>%
+  full_join(alt_combined_annot_rmsk %>%
+              dplyr::select(chrom, bp,  ID, changed, alt_type, alt_type, starting, rmsk = priority_type))  %>%
+  full_join(alt_combined_annot_lnc%>%
+               ungroup()%>%
+              dplyr::select(chrom, bp,  ID, changed, alt_type, alt_type, starting, lncRNA)) %>%
+  mutate(changed = if_else(changed == "No Change", "No Change","Change")) %>%
+  mutate(changed = factor(changed, levels = c("No Change", "Change")),
+         starting = factor(starting, levels = c("Ref Unmethylated", "Ref Methylated")),
+         gene_context = factor(gene_context, levels = c("Intergenic","Gene Body",  "Promoter")),
+         CGI = factor(CGI, levels = c("OpenSea", "Shelf", "Shore", "Island" )),
+         rmsk = factor(rmsk, levels = c("NA", "DNA", "LTR", "SINE","LINE")))
+fit <- vglm(changed ~starting + CGI+gene_context+ lncRNA+ rmsk , family = multinomial, data = alt_combined_annot_Gene)
+summary(fit)
+
+
+alt_combined_annot_Gene%>%
+  filter()
+  group_by(starting, rmsk, CGI, gene_context, lncRNA) %>%
+  summarise(n = n())
+```
+
+## CNA and LOH
+
+```{r}
+CNV <-Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/savana/*_segmented_absolute_copy_number.tsv")%>%
+  map_dfr(~fread(.x) %>%
+            dplyr::select(Chromosome = chromosome, Start_position = start, End_position =end, total_cn = copyNumber, B_cn = minorAlleleCopyNumber) %>%
+            mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+")))%>%
+  mutate(total_cn = round(total_cn), B_cn = if_else(is.na(B_cn), 0, round(B_cn)),
+    A_cn = total_cn - B_cn) %>%
+  dplyr::select(chr =Chromosome, cn_start = Start_position , cn_end = End_position, cn =total_cn, SampleID) %>%
+  filter(str_detect(SampleID, "OVCAR|UWB")) %>%
+  left_join(sample_name_mapping %>%
+              dplyr::rename(SampleID = sample)) %>%
+  dplyr::select(-SampleID) %>%
+  dplyr::rename(SampleID = alt_name)
+
+alt_combined_bp <- rbind(alt_combined %>%
+  dplyr::select(chrom, bp = alt_start, ID, alt_type, changed, SampleID) %>%
+    mutate(pos = "bp_1"),
+  alt_combined %>%
+  dplyr::select(chrom, bp = alt_end, ID, alt_type, changed, SampleID) %>%
+    filter(!alt_type %in% c("BND", "INS"))%>%
+    mutate(pos = "bp_2"))
+
+pair_mapping = data_frame(SampleID = c("OVCAR8 LP H4-53", "OVCAR8 LP H4-53", "OVCAR8 LP A6-30", "OVCAR8 LP A6-30", "OVCAR8 common", "OVCAR8 common", "OVCAR8 common", "UWB1 BRCA1", "UWB1 BRCA1"),
+                          cn_sample =c("OVCAR8 LP H4-53", "OVCAR8", "OVCAR8 LP A6-30", "OVCAR8", "OVCAR8 LP H4-53", "OVCAR8 LP A6-30", "OVCAR8",  "UWB1+BRCA1", "UWB1"))
+
+cn_alt_combined_bp <- alt_combined_bp  %>%
+  left_join(pair_mapping) %>%
+  left_join(CNV %>%
+              dplyr::rename(cn_sample = SampleID), by = join_by(chrom == chr, bp <= cn_end, bp >=cn_start , cn_sample == cn_sample)) %>%
+  drop_na() %>%
+  dplyr::select(-cn_start, -cn_end)  
+  
+
+cn_alt_combined_bp %>%
+  mutate(type = if_else(str_detect(ID, "severus"), "SV", "INDEL")) %>%
+  filter(cn_sample %in% c("OVCAR8 LP H4-53", "OVCAR8 LP A6-30", "UWB1+BRCA1")) %>%
+  # filter(SampleID == "OVCAR8 common") %>%
+  ggplot(aes(x = changed, y = cn, color = cn_sample))+
+  geom_violin()+
+  stat_summary(fun = "mean",
+               geom = "point",
+               color = "black", )+
+  stat_compare_means(comparisons = list(c("TRUE", "FALSE")))+
+  facet_grid(cols = vars(cn_sample),
+             rows = vars(type), scales = "free_x")+
+  ylim(c(0,9))
+  
+
+```
+
+##altered sequence
+
+```{r}
+#deletion
+ovcar8_mod <- c("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/severus_a630/ovcar8_merged_SV_modkit_extract.tsv", "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/OVCAR8_merged_SV_modkit_extract.tsv") %>%
+  map_dfr(~ fread(.x))
+
+deletion <- alt_combined %>%
+  filter(alt_type == "DEL", alt_len > 5, str_detect(SampleID, "OVCAR8"),
+         str_detect(ID, "severus"))  %>%
+  inner_join(ovcar8_mod %>%
+              filter(mod_code == "m", base_qual >20) %>%
+              mutate(ref_position = if_else(ref_strand == "-", ref_position -1, ref_position),
+                     Meth = case_when(mod_qual >= 0.6 ~ "Me",
+                         mod_qual <= 0.4 ~ "Un") ) %>%
+              filter(!is.na(Meth)), by = join_by(chrom == chrom, alt_start <= ref_position, alt_end >= ref_position)) %>%
+  group_by(chrom, alt_start, alt_end, alt_len, ID, changed, alt_type, SampleID, ref_position) %>%
+  summarise(meth_perc = sum(Meth == "Me")/n()) %>%
+  ungroup()%>%
+  mutate(relat_pos = (ref_position - alt_start)/ alt_len)
+
+deletion$density <- get_density(deletion$relat_pos, deletion$meth_perc, n =40)
+
+deletion%>%
+  group_by(changed) %>%
+  mutate(changed = paste0(changed, " (N=", n_distinct(ID), ")"),
+         changed = factor(changed)) %>%
+  mutate(changed = fct_rev(changed)) %>%
+  ungroup() %>%
+  group_by(ID, changed) %>%
+  summarise(med_meth = median(meth_perc)) %>%
+  ggplot(aes(x = changed, y = med_meth, color = changed))+
+  scale_color_manual(values = c(  "#bb4430", "darkgrey"), "CpG changed (N>=1)")+
+  geom_boxplot(alpha= 0.3, outlier.shape = NA)+
+  stat_compare_means(aes(label = after_stat(p.signif)), comparisons = list(c("TRUE (N=12)", "FALSE (N=24)")))+
+  geom_beeswarm()+
+  theme_bw()
+  
+
+
+```
+
+# motif investigation
+
+## deleted sequence in OVCAR8
+
 ```{r}
 changed_dist_sv_del <-CpG_DEL_fisher%>%
   filter(!(sig &diff >0)) %>%
@@ -2085,6 +2814,10 @@ changed_dist_indel_del <-CpG_indel_del_fisher%>%
   pivot_wider(names_from = "side", values_from = "relat_pos") %>%
   mutate( mid_point = (start+end)/2) %>%
   dplyr::rename(SV_start = start, SV_end = end , SV_len = indel_size) %>%
+  separate(ID, into = c("ID_1", "ID_2"), sep = ":") %>%
+  separate(ID_2, into =c ("drop", "ID_2"),sep = "_") %>%
+  dplyr::select(-drop) %>%
+  unite(ID, ID_1:ID_2, sep = "_") %>%
   mutate(ID = paste0("indel_",ID))
 
 
@@ -2109,6 +2842,7 @@ DEL_seq <- changed_dist_sv_del %>%
           filter(SV_len+40 > 10000 ) %>%
           mutate(start = SV_end +20 - 5000, end = SV_end +20,
                  ID = paste0(ID,"_d")))%>%
+  rowwise()%>%
   mutate(range = list(GRanges(chrom, IRanges(start, end))))
 
 
@@ -2118,8 +2852,6 @@ pileup_params <- PileupParam(
     min_base_quality = 20,
     min_mapq = 20
 )
-
-
 
 pileup_data <- c(lapply(DEL_seq%>%
                        filter(changed,
@@ -2136,10 +2868,7 @@ pileup_data <- c(lapply(DEL_seq%>%
                       scanBamParam = ScanBamParam(which = x),
                       pileupParam = pileup_params )))
 
-pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam",
-                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bai",
-                      scanBamParam = ScanBamParam(which = GRanges("chr11", IRanges(35698475, 35703475))),
-                      pileupParam = pileup_params )
+
 consensus <- lapply(pileup_data, function(x) x%>%
   filter(nucleotide != "-") %>%
   group_by(pos) %>%
@@ -2188,58 +2917,2025 @@ writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_ref
 
 motif_pos <-Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/meme_out/position_motif_*.txt") %>%
   map_dfr(~fread(.x, fill =T, skip = "severus") %>%
-            mutate(motif = gsub("position_motif_|.txt$", "", basename(.x)))) %>%
-  mutate(motif_width = nchar(V5)) %>%
-  dplyr::select(ID = V1, motif_start = V2, motif_name = motif, motif_width) %>%
-  mutate(motif_name_plot = case_when(motif_name == "1" ~"Motif 2",
-                                     motif_name == "2" ~"Motif 4",
-                                     motif_name == "3" ~"Motif 3",
-                                     motif_name == "4" ~"Motif 6",
-                                     motif_name == "5" ~"Motif 7",
-                                     motif_name == "6" ~"Motif 1",
-                                     motif_name == "7" ~"Motif 5",)) %>%
-  dplyr::select(-motif_name) %>%
-  dplyr::rename(`motif name` = motif_name_plot)
+            mutate(motif = gsub(".txt", "", gsub("position_motif_", "Motif ", basename(.x))))) %>%
+  mutate(motif_width = nchar(V6)) %>%
+  dplyr::select(ID = V1, motif_strand = V2,  motif_start = V3, motif_name = motif, motif_width) 
 
 motif_dist <- DEL_seq %>%
   filter(changed) %>%
-  inner_join(motif_pos) %>%
-  mutate(SV_len = abs(SV_end - SV_start),
-         motif_start_relat = (start + motif_start-SV_start)/SV_len, motif_end_relat = (start + motif_start-SV_start +motif_width)/SV_len)%>%
-  filter(motif_start_relat>=0, motif_start_relat <= 1) %>%
-  mutate(ID = gsub("_u|_d", "", ID))
+  mutate(ID = substr(ID, 1, 24)) %>%
+  left_join(motif_pos) %>%
+  mutate(ID = gsub("_u|_d", "", ID),
+         SV_len = abs(SV_end - SV_start),
+         motif_start_relat = (start + motif_start-SV_start)/SV_len, motif_end_relat = (start + motif_start-SV_start +motif_width)/SV_len,
+         motif_relat_pos = case_when(motif_start_relat <= 0 & motif_end_relat >=0 ~ 0.5, 
+                                     motif_start_relat > 0 & motif_start_relat <1 & motif_end_relat >=1 ~ motif_start_relat,
+                                    TRUE ~ (motif_start_relat + motif_end_relat) /2),
+         type = if_else(str_detect(ID, "severus"), "SV", "INDEL")) %>%
+  filter(!(!is.na(motif_relat_pos) & (motif_relat_pos > 1 | motif_relat_pos <0 ) ))
+  
 
 motif_dist %>%
-  group_by(changed) %>%
+  mutate(type = if_else(str_detect(ID, "severus"),"SV", "INDEL")) %>%
+  group_by(type, motif_name) %>%
   summarise(n = n_distinct(ID))
 
-motif_dist%>%
-  ggplot(aes(x = motif_start_relat,  y = ID,  color = `motif name`))+
-  geom_point(shape =3)+
+plot <- motif_dist%>%
+  filter(!is.na(motif_name)) %>%
+  ggplot(aes(x = motif_relat_pos,  y = ID,  color = `motif_name`))+
+  geom_point(alpha = 0.6)+
   theme_bw()+
   theme(legend.position = "bottom",
         axis.ticks.y = element_blank(),
-        axis.text.y = element_blank())+
-  ylab("SV DEL Event") +
-  scale_x_continuous(breaks = c(0, 1), labels = c("DEL start", "DEL end"), name = "Relative Position within SV DEL")+
-  scale_color_manual(values= c("Motif 1"="#ff7480","Motif 2"="#fbb040", "Motif 3"="#fcec52", "Motif 4"="#99ca3c", "Motif 5"="#2bdae6",
-                               "Motif 6"="#08b2f5","Motif 7"="#8178ff"))
-ggsave("plots/del_changed_motif_distribution.pdf", width = 8, height = 3.5)
+        axis.text.y = element_blank(),
+         strip.background = element_rect(fill = NA))+
+  ylab("DEL Event") +
+  coord_cartesian(xlim =c(-0,1))+
+  scale_x_continuous(breaks = c(0, 1), labels = c("DEL start", "DEL end"), name = "Relative position to deleted sequence")+
+  facet_wrap(~type, ncol = 2, scales = "free_y")+
+  scale_color_manual(values= c("Motif 1"="#ff7480","Motif 2"="#fbb040",  "Motif 3"="#2bdae6",
+                               "Motif 5"="#08b2f5","Motif 4"="#8178ff"))
 
-LT = list("Motif 1" = motif_dist%>% filter(`motif name` == "Motif 1") %>% pull(ID) %>%unique(),
-          "Motif 2" = motif_dist%>% filter(`motif name` == "Motif 2") %>% pull(ID) %>%unique(),
-          "Motif 3" = motif_dist%>% filter(`motif name` == "Motif 3") %>% pull(ID) %>%unique(),
-          "Motif 4" = motif_dist%>% filter(`motif name` == "Motif 4") %>% pull(ID) %>%unique(),
-          "Motif 5" = motif_dist%>% filter(`motif name` == "Motif 5") %>% pull(ID) %>%unique(),
-          "Motif 6" = motif_dist%>% filter(`motif name` == "Motif 6") %>% pull(ID) %>%unique(),
-          "Motif 7" = motif_dist%>% filter(`motif name` == "Motif 7") %>% pull(ID) %>%unique())
+gp <- ggplotGrob(plot)
+# get gtable columns corresponding to the facets (5 & 9, in this case)
+facet.columns <- gp$layout$l[grepl("panel", gp$layout$name)]
+
+# get the number of unique x-axis values per facet (1 & 3, in this case)
+x.var <- sapply(ggplot_build(plot)$layout$panel_scales_x,
+                function(l) length(l$range$range))
+
+# change the relative widths of the facet columns based on
+# how many unique x-axis values are in each facet
+gp$widths[facet.columns] <- gp$widths[facet.columns] * c(1,6)
+
+# plot result
+pdf("plots/del_changed_motif_distribution.pdf", width = 10, height =4)
+grid::grid.draw(gp)
+dev.off()
+
+
+LT = list("Motif 1" = motif_dist%>% filter(`motif_name` == "Motif 1", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 2" = motif_dist%>% filter(`motif_name` == "Motif 2", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 3" = motif_dist%>% filter(`motif_name` == "Motif 3", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 4" = motif_dist%>% filter(`motif_name` == "Motif 4", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 5" = motif_dist%>% filter(`motif_name` == "Motif 5", type == "SV") %>% pull(ID) %>%unique(),
+          "No Motif" = motif_dist%>% filter(is.na(`motif_name`), type == "SV") %>% pull(ID) %>%unique())
 
 
 m <- make_comb_mat(LT)
-pdf("plots/del_changed_motif_upset.pdf", width = 8, height =4)
+pdf("plots/del_changed_motif_upset_SV.pdf", width = 8, height =4)
 UpSet(m)
 dev.off()
 
+
+
+LT = list("Motif 1" = motif_dist%>% filter(`motif_name` == "Motif 1", type == "INDEL") %>% pull(ID) %>%unique(),
+          "Motif 2" = motif_dist%>% filter(`motif_name` == "Motif 2", type == "INDEL") %>% pull(ID) %>%unique(),
+          "Motif 5" = motif_dist%>% filter(`motif_name` == "Motif 5", type == "INDEL") %>% pull(ID) %>%unique(),
+          "No Motif" = motif_dist%>% filter(is.na(`motif_name`), type == "INDEL") %>% pull(ID) %>%unique())
+
+
+m <- make_comb_mat(LT)
+pdf("plots/del_changed_motif_upset_INDEL.pdf", width = 8, height =4)
+UpSet(m, set_order = c("Motif 1", "Motif 2", "Motif 5", "No Motif"))
+dev.off()
+
+motif_dist %>%
+  mutate(type = if_else(str_detect(ID, "severus"),"SV", "INDEL"),
+         motif = (!is.na(motif_name))) %>%
+  group_by(ID) %>%
+  filter(n_distinct(motif_name)==5) %>%
+  pull(ID) %>%
+  unique()
+  group_by(motif, type) %>%
+  # group_by(type, motif_name) %>%
+  summarise(n = n_distinct(ID))
+
+```
+
+##fusion sequence in OVCAR8
+
+```{r}
+changed_dist_sv_del <-CpG_DEL_fisher%>%
+  filter(!(sig &diff >0)) %>%
+  group_by(ID) %>%
+  mutate(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")) %>%
+  ungroup()%>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change"))) %>%
+  inner_join(plot_DEL %>%
+               dplyr::select(SV_start, SV_end, ID, chrom, SV_len,relat_pos, ref_position) %>%
+               distinct()) %>%
+  group_by(ID, chrom, SV_start, SV_end, SV_len) %>%
+  mutate(side = if_else(relat_pos >0, "downstream of BP", "upstream of BP")) %>%
+  group_by(ID) %>%
+  filter(sum(sig) ==0 | sig) %>%
+  ungroup()%>%
+  group_by(SV_start, SV_end, ID, chrom, SV_len, side, changed) %>%
+  filter(abs(relat_pos ) == min(abs(relat_pos)) )  %>%
+  dplyr::select(ID, changed, side, relat_pos, SV_start,SV_end) %>%
+  distinct() %>%
+  pivot_wider(names_from = "side", values_from = "relat_pos") %>%
+  mutate( mid_point = (SV_start+SV_end)/2)
+
+
+changed_dist_indel_del <-CpG_indel_del_fisher%>%
+  filter(!(sig &diff >0)) %>%
+  group_by(ID) %>%
+  mutate(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")) %>%
+  ungroup()%>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change"))) %>%
+  inner_join(plot_indel_del %>%
+               dplyr::select(start, end, ID, chrom, indel_size,relat_pos, ref_position) %>%
+               distinct()) %>%
+  group_by(ID, chrom, start, end, indel_size) %>%
+  mutate(side = if_else(relat_pos >0, "downstream of BP", "upstream of BP")) %>%
+  group_by(ID) %>%
+  filter(sum(sig) ==0 | sig) %>%
+  ungroup()%>%
+  group_by(start, end, ID, chrom, indel_size, side, changed) %>%
+  filter(abs(relat_pos ) == min(abs(relat_pos)) )  %>%
+  dplyr::select(ID, changed, side, relat_pos, start,end) %>%
+  distinct() %>%
+  pivot_wider(names_from = "side", values_from = "relat_pos") %>%
+  mutate( mid_point = (start+end)/2) %>%
+  dplyr::rename(SV_start = start, SV_end = end , SV_len = indel_size) %>%
+  separate(ID, into = c("ID_1", "ID_2"), sep = ":") %>%
+  separate(ID_2, into =c ("drop", "ID_2"),sep = "_") %>%
+  dplyr::select(-drop) %>%
+  unite(ID, ID_1:ID_2, sep = "_") %>%
+  mutate(ID = paste0("indel_",ID))
+
+
+DEL_seq <- changed_dist_sv_del %>%
+  mutate(start = SV_start - 25, end = SV_end +25) %>%
+  rbind(changed_dist_indel_del%>%
+  mutate(start = SV_start - 20, end = SV_end +20) ) %>%
+  mutate(Sample = case_when(str_detect(ID, "common") ~ "OVCAR8_LP_A6_30",
+                            str_detect(ID, "a630") ~ "OVCAR8_LP_A6_30",
+                            str_detect(ID, "h453") ~ "OVCAR8_LP_H4_53",
+                            str_detect(ID, "_U") ~ "UWB1_BRCA1")) %>%
+  rowwise()%>%
+  mutate(range = list(GRanges(chrom, IRanges(start, end))))
+CpG_DEL_fisher %>%
+    filter(SV_len <= 200) %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")
+
+pileup_params <- PileupParam(
+    distinguish_nucleotides = TRUE,
+    distinguish_strands = FALSE,
+    min_base_quality = 20,
+    min_mapq = 20
+)
+
+
+pileup_data <- DEL_seq%>%
+  filter(changed == "Decrease") %>%
+  group_by(Sample, ID) %>%
+  group_map(~ pileup(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$Sample),"/",unique(.y$Sample),"_mapped_sc.bam"),
+                      index = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$Sample),"/",unique(.y$Sample),"_mapped_sc.bai"),
+                       scanBamParam = ScanBamParam(which = .x$range[[1]]),
+                           pileupParam = pileup_params ))
+
+consensus <- lapply(pileup_data, function(x) x %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+    ungroup() %>%
+  { bind_rows(slice_head(., n = 25), slice_tail(., n = 25)) } %>%
+    filter(base != "-") %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <- c(DEL_seq %>% 
+                            filter(changed =="Decrease") %>%pull(ID))
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_loss_fusion_sequences.fasta")
+
+
+pileup_data <- DEL_seq%>%
+  filter(changed == "No Change") %>%
+  group_by(Sample, ID) %>%
+  group_map(~ pileup(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$Sample),"/",unique(.y$Sample),"_mapped_sc.bam"),
+                      index = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$Sample),"/",unique(.y$Sample),"_mapped_sc.bai"),
+                       scanBamParam = ScanBamParam(which = .x$range[[1]]),
+                           pileupParam = pileup_params ))
+
+consensus <- lapply(pileup_data, function(x) x %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+    ungroup() %>%
+  { bind_rows(slice_head(., n = 25), slice_tail(., n = 25)) } %>%
+    filter(base != "-") %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <- c(DEL_seq %>% 
+                            filter(changed =="No Change") %>%pull(ID))
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_ref_fusion_sequences.fasta")
+
+
+motif_pos <-Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/meme_out/position_motif_*.txt") %>%
+  map_dfr(~fread(.x, fill =T, skip = "severus") %>%
+            mutate(motif = gsub(".txt", "", gsub("position_motif_", "Motif ", basename(.x))))) %>%
+  mutate(motif_width = nchar(V6)) %>%
+  dplyr::select(ID = V1, motif_strand = V2,  motif_start = V3, motif_name = motif, motif_width) 
+
+motif_dist <- DEL_seq %>%
+  filter(changed) %>%
+  mutate(ID = substr(ID, 1, 24)) %>%
+  left_join(motif_pos) %>%
+  mutate(ID = gsub("_u|_d", "", ID),
+         SV_len = abs(SV_end - SV_start),
+         motif_start_relat = (start + motif_start-SV_start)/SV_len, motif_end_relat = (start + motif_start-SV_start +motif_width)/SV_len,
+         motif_relat_pos = case_when(motif_start_relat <= 0 & motif_end_relat >=0 ~ 0.5, 
+                                     motif_start_relat > 0 & motif_start_relat <1 & motif_end_relat >=1 ~ motif_start_relat,
+                                    TRUE ~ (motif_start_relat + motif_end_relat) /2),
+         type = if_else(str_detect(ID, "severus"), "SV", "INDEL")) %>%
+  filter(!(!is.na(motif_relat_pos) & (motif_relat_pos > 1 | motif_relat_pos <0 ) ))
+  
+
+
+plot <- motif_dist%>%
+  filter(!is.na(motif_name)) %>%
+  ggplot(aes(x = motif_relat_pos,  y = ID,  color = `motif_name`))+
+  geom_point(alpha = 0.6)+
+  theme_bw()+
+  theme(legend.position = "bottom",
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+         strip.background = element_rect(fill = NA))+
+  ylab("DEL Event") +
+  coord_cartesian(xlim =c(-0,1))+
+  scale_x_continuous(breaks = c(0, 1), labels = c("DEL start", "DEL end"), name = "Relative position to deleted sequence")+
+  facet_wrap(~type, ncol = 2, scales = "free_y")+
+  scale_color_manual(values= c("Motif 1"="#ff7480","Motif 2"="#fbb040",  "Motif 3"="#2bdae6",
+                               "Motif 5"="#08b2f5","Motif 4"="#8178ff"))
+
+gp <- ggplotGrob(plot)
+# get gtable columns corresponding to the facets (5 & 9, in this case)
+facet.columns <- gp$layout$l[grepl("panel", gp$layout$name)]
+
+# get the number of unique x-axis values per facet (1 & 3, in this case)
+x.var <- sapply(ggplot_build(plot)$layout$panel_scales_x,
+                function(l) length(l$range$range))
+
+# change the relative widths of the facet columns based on
+# how many unique x-axis values are in each facet
+gp$widths[facet.columns] <- gp$widths[facet.columns] * c(1,6)
+
+# plot result
+pdf("plots/del_changed_motif_distribution.pdf", width = 10, height =4)
+grid::grid.draw(gp)
+dev.off()
+
+
+LT = list("Motif 1" = motif_dist%>% filter(`motif_name` == "Motif 1", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 2" = motif_dist%>% filter(`motif_name` == "Motif 2", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 3" = motif_dist%>% filter(`motif_name` == "Motif 3", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 4" = motif_dist%>% filter(`motif_name` == "Motif 4", type == "SV") %>% pull(ID) %>%unique(),
+          "Motif 5" = motif_dist%>% filter(`motif_name` == "Motif 5", type == "SV") %>% pull(ID) %>%unique(),
+          "No Motif" = motif_dist%>% filter(is.na(`motif_name`), type == "SV") %>% pull(ID) %>%unique())
+
+
+m <- make_comb_mat(LT)
+pdf("plots/del_changed_motif_upset_SV.pdf", width = 8, height =4)
+UpSet(m)
+dev.off()
+
+
+
+LT = list("Motif 1" = motif_dist%>% filter(`motif_name` == "Motif 1", type == "INDEL") %>% pull(ID) %>%unique(),
+          "Motif 2" = motif_dist%>% filter(`motif_name` == "Motif 2", type == "INDEL") %>% pull(ID) %>%unique(),
+          "Motif 5" = motif_dist%>% filter(`motif_name` == "Motif 5", type == "INDEL") %>% pull(ID) %>%unique(),
+          "No Motif" = motif_dist%>% filter(is.na(`motif_name`), type == "INDEL") %>% pull(ID) %>%unique())
+
+
+m <- make_comb_mat(LT)
+pdf("plots/del_changed_motif_upset_INDEL.pdf", width = 8, height =4)
+UpSet(m, set_order = c("Motif 1", "Motif 2", "Motif 5", "No Motif"))
+dev.off()
+
+motif_dist %>%
+  mutate(type = if_else(str_detect(ID, "severus"),"SV", "INDEL"),
+         motif = (!is.na(motif_name))) %>%
+  group_by(ID) %>%
+  filter(n_distinct(motif_name)==5) %>%
+  pull(ID) %>%
+  unique()
+  group_by(motif, type) %>%
+  # group_by(type, motif_name) %>%
+  summarise(n = n_distinct(ID))
+
+```
+
+##OVCAR 8 AND #48 motif matching
+
+```{r}
+
+pileup_params <- PileupParam(
+    distinguish_nucleotides = TRUE,
+    distinguish_strands = FALSE,
+    min_base_quality = 20,
+    min_mapq = 20
+)
+
+pileup_data <- pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam",
+                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bai",
+                      scanBamParam = ScanBamParam(which = GRanges(seqnames = "chr17", IRanges(start =43124711-10, end = 43124730+10))),
+                      pileupParam = pileup_params )
+
+consensus <- pileup_data%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = "")
+consensus_seq <- unlist(consensus)
+
+
+pileup_data <- pileup(file = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bam",
+                      index = "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/OVCAR8_mapped_sc.bai",
+                      scanBamParam = ScanBamParam(which = GRanges(seqnames = "chr17", IRanges(start =43126438-10, end = 43126442+10))),
+                      pileupParam = pileup_params )
+
+consensus <- pileup_data%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = "")
+consensus_seq <- unlist(consensus)
+```
+
+# SV_changed overlap with h3k27ac public chip
+
+```{r}
+peak_files <- Sys.glob("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/*.*Peak")
+peak_files <- peak_files[!str_detect(peak_files, "gapped")]
+
+peaks <- peak_files %>%
+  map_dfr(~ fread(.x) %>%
+            mutate(histone_mod = gsub("_peaks.broadPeak", "", gsub("_peaks.narrowPeak", "", basename(.x)))))%>%
+            `colnames<-`(c("chrom", "peak_start", "peak_end", "peak_name", "peak_score", "peak_strand", "peak_signalValue", "peak_pvalue", "peak_qvalue", "histone_mod", "NA"))  %>%
+  dplyr::select(-"NA")
+
+
+histone_overlap_sv <- rbind(CpG_DEL_fisher %>%
+                              dplyr::rename(alt_len = SV_len),
+                            CpG_indel_del_fisher%>%
+                              filter(indel_size >=5) %>%
+                              dplyr::rename(alt_len = indel_size))%>%
+  filter(! str_detect(ID, "_U$"))%>%
+  mutate(Sample =case_when(str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                           str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           str_detect(ID, "_common$") ~"OVCAR8 common"),
+         Sample = factor(Sample))  %>%
+  group_by(ID) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")) %>%
+  ungroup() %>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change"))) %>%
+  left_join(motif_pos %>%
+              separate(ID, into = c("tool", "code", "sample"), extra = "drop",
+                       sep = "_") %>%
+              unite("ID", "tool":"code":"sample", sep = "_") %>%
+              dplyr::select(ID, motif_name)) %>%
+  group_by(ID, changed) %>%
+  summarise(motif_name = paste(unique(motif_name), collapse = "; ")) %>%
+  ungroup() %>%
+  left_join(plot_DEL_density %>%
+              dplyr::select(ID, chrom, SV_start, SV_end) %>%
+              distinct()) %>%
+  distinct() %>%
+  mutate(SV_start = SV_start - 15000, SV_end = SV_end +15000) %>%
+  left_join(peaks %>%
+              dplyr::select(chrom, peak_start, peak_end, peak_signalValue, histone_mod),
+            by= join_by(chrom == chrom, SV_start <= peak_end, SV_end >= peak_start)) %>%
+  dplyr::select(-peak_start, -peak_end, -peak_signalValue) %>%
+  mutate(hist_moded = !is.na(histone_mod)) %>%
+distinct() %>%
+  pivot_wider(names_from = histone_mod, values_from = hist_moded, values_fill = FALSE) %>%
+  dplyr::select(-"NA")  %>%
+  pivot_longer(cols = starts_with("H3"),values_to = "Presence",names_to = "Histone Marker") 
+
+
+
+histone_overlap_sv%>%
+  filter(changed != "Increase") %>%
+  mutate(motif = !(motif_name == "NA"),
+         changed = case_when( changed == "No Change" ~ changed,
+                              motif ~ changed,
+                              TRUE ~paste0(changed, "_NoM")),
+         `Histone Marker` = gsub("POS", "",`Histone Marker`  ),
+         Presence = factor(Presence, levels = c("TRUE", "FALSE"))) %>%
+  ggplot(aes(fill =Presence ,  x = changed))+
+  geom_bar(stat = "count")+
+  facet_wrap(~`Histone Marker`)+
+    theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, vjust = 0.5), legend.position = "bottom",
+        strip.background = element_rect(fill = NA))+
+  scale_fill_manual(values = c("TRUE" ="#283618" , "FALSE" = "#dda15e"), "Histone Modified")
+ggsave("plots/sv_del_histone_marker.pdf", height = 4, width = 6)
+
+histone_overlap_sv %>%
+  filter((motif_name != "NA" | changed == "No Change")) %>%
+  mutate(Presence = if_else(Presence, `Histone Marker`, NA),
+         motif = motif_name !="NA") %>%
+  group_by(Presence, changed, ID, motif) %>%
+  summarise(histone_mod = paste(na.omit(Presence), collapse = ";"))
+```
+
+#Deletion microhomology https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1006368
+
+https://github.com/Gaorav-Gupta-Lab/ScarMapper/blob/master/scarmapper/INDEL_Processing.py
+
+```         
+        The junction_type_data list contains the repair type category counts.  [0] TMEJ, del_size >= 4 and 
+        microhomology_size >= 2; [1] NHEJ, del_size < 4 and ins_size < 5; [2] insertions >= 5 
+        [3] Junctions with scars not represented by the other categories; [4] Non-MH Deletions, del_size >= 4 and 
+        microhomology_size < 2 and ins_size < 5: [5] SNV, del_size > 1 and del_size == ins_size and 
+        lft_del <= kmer_size and rt_del <= kmer_size
+```
+##deletion
+```{r}
+merged_DEL_simp <- rbind(CpG_indel_del_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "indel")%>%
+          left_join(merged_indel_del %>%
+                      dplyr::select(ID, chrom, SV_start = start, SV_end = end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+  summarise(changed = sum(sig) >0),
+  CpG_DEL_fisher %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")%>%
+          left_join(merged_DEL %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+  summarise(changed = sum(sig) >0)) %>%
+  filter(alt_len >=5)
+      
+
+
+#forward
+five_prime_flank <- getSeq(hg38,  merged_DEL_simp$chrom, merged_DEL_simp$SV_start - 7, merged_DEL_simp$SV_start+8)
+three_prime_flank <- getSeq(hg38, merged_DEL_simp$chrom, merged_DEL_simp$SV_end -7, merged_DEL_simp$SV_end + 8)
+deleted_microhom <- cbind(merged_DEL_simp, tibble(five_prime_flank = as.character(five_prime_flank), 
+                                three_prime_flank = as.character(three_prime_flank))) %>%
+  mutate(Sample = case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           TRUE ~ "OVCAR8"),
+          Sample = factor(Sample)) %>%
+  group_by(ID, Sample) 
+
+
+get_match_matrix <- function(seqA, seqB, n) {
+  basesA <- strsplit(seqA, "")[[1]]
+  basesB <- rev(strsplit(seqB, "")[[1]])
+  outer(basesA, basesB, Vectorize(function(a, b) as.integer(a == b)))
+}
+
+
+UWB1_matrix <- deleted_microhom %>%
+  filter(Sample == "UWB1 BRCA1") %>%
+  group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+  Reduce('+', .)
+
+# UWB1_matrix <- deleted_microhom %>%
+#   filter(Sample == "UWB1 BRCA1", changed) %>%
+#   group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+#   Reduce('+', .)
+
+O_matrix_no <- deleted_microhom %>%
+  filter(Sample == "OVCAR8", !changed) %>%
+  group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+  Reduce('+', .)
+
+O_matrix <- deleted_microhom %>%
+  filter(Sample == "OVCAR8", changed) %>%
+  mutate(n = n_distinct(ID)) %>%
+  group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+  Reduce('+', .)
+
+
+library(circlize)
+col_fun = colorRamp2(c(0, 0.5, 1), c("#0466c8", "white", "#bf0603"))
+
+ComplexHeatmap::Heatmap(O_matrix_no/max(O_matrix_no) ,cluster_rows = F, cluster_columns = F,col = col_fun)
+ComplexHeatmap::Heatmap(O_matrix/max(O_matrix) ,cluster_rows = F, cluster_columns = F,col = col_fun)
+ComplexHeatmap::Heatmap(UWB1_matrix/max(UWB1_matrix) ,cluster_rows = F, cluster_columns = F,col = col_fun)
+
+# ComplexHeatmap::Heatmap(UWB1_matrix/3 ,cluster_rows = F, cluster_columns = F,col = col_fun)
+
+
+
+five_prime_flank <- getSeq(hg38,  merged_DEL_simp$chrom, merged_DEL_simp$SV_start - 2, merged_DEL_simp$SV_start-1)
+three_prime_flank <- getSeq(hg38, merged_DEL_simp$chrom, merged_DEL_simp$SV_end-2, merged_DEL_simp$SV_end-1 )
+
+deleted_microhom <- cbind(merged_DEL_simp, tibble(five_prime_flank = as.character(five_prime_flank), 
+                                three_prime_flank = as.character(three_prime_flank))) %>%
+  mutate(Sample = case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                            # str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                            # str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           TRUE ~ "OVCAR8"),
+         twobase_microhomology = five_prime_flank== three_prime_flank,
+          Sample = factor(Sample)) %>%
+  group_by(ID, Sample) %>%
+  mutate(type = case_when(twobase_microhomology &alt_len >=4 ~ "TMEJ (del >4bp, mh>=2bp)",
+                          !twobase_microhomology &alt_len >=4 ~ "non-MH Deletion",
+                          alt_len <4 ~ "NHEJ (del <4bp)"))
+
+deleted_microhom %>%
+  filter(alt_len >=4) %>%
+  mutate(threebase = five_prime_flank== three_prime_flank) %>%
+  ggplot(aes(x = changed, fill = type)) +
+  geom_bar(stat = "count")+
+  facet_wrap(~Sample)+
+  theme(legend.position = "bottom")
+```
+##insertion
+```{r}
+merged_INS_simp <- rbind(CpG_indel_ins_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "indel")%>%
+          left_join(merged_indel_ins %>%
+                      dplyr::select(ID, chrom, SV_start = start, SV_end = end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+  summarise(changed = sum(sig) >0),
+  CpG_INS_fisher %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")%>%
+          left_join(merged_DEL %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+  summarise(changed = sum(sig) >0)) %>%
+  filter(alt_len >=5)
+      
+
+
+#forward
+five_prime_flank <- getSeq(hg38,  merged_INS_simp$chrom, merged_INS_simp$SV_start - 7, merged_INS_simp$SV_start+8)
+three_prime_flank <- getSeq(hg38, merged_INS_simp$chrom, merged_INS_simp$SV_end -7, merged_INS_simp$SV_end + 8)
+INSeted_microhom <- cbind(merged_INS_simp, tibble(five_prime_flank = as.character(five_prime_flank), 
+                                three_prime_flank = as.character(three_prime_flank))) %>%
+  mutate(Sample = case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                           TRUE ~ "OVCAR8"),
+          Sample = factor(Sample)) %>%
+  group_by(ID, Sample) 
+
+
+get_match_matrix <- function(seqA, seqB, n) {
+  basesA <- strsplit(seqA, "")[[1]]
+  basesB <- rev(strsplit(seqB, "")[[1]])
+  outer(basesA, basesB, Vectorize(function(a, b) as.integer(a == b)))
+}
+
+
+UWB1_matrix <- INSeted_microhom %>%
+  filter(Sample == "UWB1 BRCA1") %>%
+  group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+  Reduce('+', .)
+
+# UWB1_matrix <- INSeted_microhom %>%
+#   filter(Sample == "UWB1 BRCA1", changed) %>%
+#   group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+#   Reduce('+', .)
+
+O_matrix_no <- INSeted_microhom %>%
+  filter(Sample == "OVCAR8", !changed) %>%
+  group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+  Reduce('+', .)
+
+O_matrix <- INSeted_microhom %>%
+  filter(Sample == "OVCAR8", changed) %>%
+  mutate(n = n_distinct(ID)) %>%
+  group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
+  Reduce('+', .)
+
+
+library(circlize)
+col_fun = colorRamp2(c(0, 0.5, 1), c("#0466c8", "white", "#bf0603"))
+
+ComplexHeatmap::Heatmap(O_matrix_no/107 ,cluster_rows = F, cluster_columns = F,col = col_fun)
+ComplexHeatmap::Heatmap(O_matrix/90 ,cluster_rows = F, cluster_columns = F,col = col_fun)
+ComplexHeatmap::Heatmap(UWB1_matrix/105 ,cluster_rows = F, cluster_columns = F,col = col_fun)
+
+# ComplexHeatmap::Heatmap(UWB1_matrix/3 ,cluster_rows = F, cluster_columns = F,col = col_fun)
+
+
+
+five_prime_flank <- getSeq(hg38,  merged_INS_simp$chrom, merged_INS_simp$SV_start - 2, merged_INS_simp$SV_start-1)
+three_prime_flank <- getSeq(hg38, merged_INS_simp$chrom, merged_INS_simp$SV_end-2, merged_INS_simp$SV_end-1 )
+
+INSeted_microhom <- cbind(merged_INS_simp, tibble(five_prime_flank = as.character(five_prime_flank), 
+                                three_prime_flank = as.character(three_prime_flank))) %>%
+  mutate(Sample = case_when(str_detect(ID, "_U$") ~"UWB1 BRCA1",
+                            # str_detect(ID, "_a630$") ~"OVCAR8 LP A6-30",
+                            # str_detect(ID, "_h453$") ~"OVCAR8 LP H4-53",
+                           TRUE ~ "OVCAR8"),
+         twobase_microhomology = five_prime_flank== three_prime_flank,
+          Sample = factor(Sample)) %>%
+  group_by(ID, Sample) %>%
+  mutate(type = case_when(twobase_microhomology &alt_len >=4 ~ "TMEJ (INS >4bp, mh>=2bp)",
+                          !twobase_microhomology &alt_len >=4 ~ "non-MH INSetion",
+                          alt_len <4 ~ "NHEJ (INS <4bp)"))
+
+INSeted_microhom %>%
+  filter(alt_len >=4) %>%
+  mutate(threebase = five_prime_flank== three_prime_flank) %>%
+  ggplot(aes(x = changed, fill = type)) +
+  geom_bar(stat = "count")+
+  facet_wrap(~Sample)+
+  theme(legend.position = "bottom")
+```
+
+#PDX validation
+
+```{r}
+# DEL_reads_file <- Sys.glob("output/*/*_DEL_meth.RDS")
+# DEL_reads_file <- DEL_reads_file[!str_detect(DEL_reads_file, "UWB|OVCAR")]
+# DEL_reads <- DEL_reads_file %>%
+#   map_dfr( ~ readRDS(.x) %>%
+#              mutate(SampleID= gsub("_DEL_meth.RDS", "", basename(.x))) %>%
+#   mutate(mod = case_when(mod_qual >= 0.6 ~ 1,
+#                          mod_qual <= 0.4 ~ 0,
+#                          T ~ NA)) %>%
+#   filter(base_qual >=20, !is.na(mod),  ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
+#   group_by(ID, read_type) %>%
+#   filter(n()>2) %>%
+#   ungroup() %>%
+#   group_by(ID, read_type) %>%
+#   filter(n_distinct(read_id)>2) %>%
+#   ungroup() %>%
+#   group_by(ID) %>%
+#   filter(n_distinct(read_type)== 2) %>%
+#   ungroup())
+# saveRDS(DEL_reads, "output/total_del_meth.RDS")
+
+pdx_DEL_reads <- readRDS("output/total_del_meth.RDS")
+
+non_overlapped_id <- pdx_DEL_reads %>%
+  dplyr::select(SV_start, SV_end, chrom,ID, SampleID) %>%
+  distinct() %>%
+  left_join(pdx_DEL_reads %>%
+  dplyr::select(SV_start_2 = SV_start, SV_end_2 = SV_end, chrom,ID_2 = ID, SampleID)%>%
+  distinct(),
+   by = join_by(chrom == chrom, SampleID == SampleID, SV_start <=SV_end_2, SV_end >= SV_start_2)) %>%
+  group_by(SV_start, SV_end, chrom,ID, SampleID) %>%
+  filter(n_distinct(ID_2) == 1)
+
+pdx_del_meth <- pdx_DEL_reads %>%
+  filter(ID %in% unlist(non_overlapped_id$ID)) %>%
+  mutate(ref_position = if_else(ref_strand == "-", ref_position-1, ref_position)) %>%
+  group_by(SampleID, read_type, ref_position, chrom, ID, SV_start, SV_end, SV_len) %>%
+  summarise(Meth = sum(mod == 1), read_cnts = n(),
+            Unmeth = read_cnts - Meth,
+            meth_perc = Meth/read_cnts) %>%
+  ungroup() 
+
+
+PDX_DEL_fisher <-pdx_del_meth   %>%
+  dplyr::select(SampleID, ID,SV_start, SV_end, ref_position,chrom, read_type, Meth, Unmeth, SV_len) %>%
+  distinct() %>%
+  group_by(SampleID, ID, SV_start, SV_end, ref_position,chrom, read_type,  SV_len) %>%
+  pivot_wider(values_from = c(Meth, Unmeth),names_from = read_type)%>%
+  distinct() %>%
+  drop_na() %>%
+  filter(Meth_alt+Unmeth_alt >3, Meth_ref+Unmeth_ref>3, 
+         Meth_ref/(Meth_ref+Unmeth_ref) >=0.8| Meth_ref/(Meth_ref+Unmeth_ref) <=0.2) %>%
+  group_by(ID, ref_position, SV_len, SampleID) %>%
+  rowwise() %>%
+  mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
+  mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
+  group_by(ID) %>%
+  mutate(fisher.adj = p.adjust(p.value),
+         sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
+  ungroup()  
+
+
+merged_DEL_simp <- PDX_DEL_fisher%>%
+  group_by(SampleID, SV_len, ID, chrom, SV_start, SV_end) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change"),
+            changed_n = sum(sig),
+            no_change_degree = max(abs(diff))) %>%
+  ungroup()%>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change"))) %>%
+  left_join(sample_name_mapping %>%
+              dplyr::select(SampleID =sample, alt_name)) %>%
+  mutate(HR = if_else(SampleID %in% hom_me_list, "hom meBRCA1", "het meBRCA1")) %>%
+  filter((changed == "No Change" & no_change_degree<= 0.2 )| (changed == "Decrease" & changed_n>=3))
+
+
+merged_DEL_simp_meth_loss <- PDX_DEL_fisher%>%
+  filter(Meth_ref / Unmeth_ref >= 0.8) %>%
+  group_by(SampleID, SV_len, ID, chrom, SV_start, SV_end) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change"),
+            changed_n = sum(sig),
+            no_change_degree = max(abs(diff))) %>%
+  ungroup()%>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change"))) %>%
+  left_join(sample_name_mapping %>%
+              dplyr::select(SampleID =sample, alt_name)) %>%
+  mutate(HR = if_else(SampleID %in% hom_me_list, "hom meBRCA1", "het meBRCA1")) %>%
+  filter((changed == "No Change" & no_change_degree<= 0.2 )| (changed == "Decrease" & changed_n>=3))
+  
+merged_DEL_simp_meth_loss%>%
+  dplyr::select(SampleID, SV_len, ID, chrom, SV_start, SV_end, changed, changed_n, alt_name, HR) %>%
+  distinct()
+
+
+PDX_DEL_fisher %>%
+  filter(SampleID != "SFRC01585S1_2163_T3") %>%
+  group_by(SampleID, SV_len, ID) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")) %>%
+  ungroup()%>%
+  mutate(changed = factor(changed, levels = c("Bi-Directional", "Increase", "Decrease", "No Change"))) %>%
+  left_join(sample_name_mapping %>%
+              dplyr::select(SampleID =sample, alt_name)) %>%
+  mutate(HR = if_else(SampleID %in% hom_me_list, "hom meBRCA1", "het meBRCA1")) %>%
+  group_by(alt_name, changed, HR) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(x = alt_name, fill  = changed, y = n)) +
+  geom_bar(stat = "identity", position = "fill", color = "black") +
+    facet_wrap(~HR, scales = "free_x")+
+  geom_text(aes(label = paste0("N=", n)),
+            position = position_fill(vjust = 0.5))+
+  scale_fill_manual(values = sig_change_palette)+
+  theme_bw()+
+  theme(legend.position = "bottom")
+
+```
+
+## PDX TMEJ
+
+```{r}
+
+#forward
+five_prime_flank <- getSeq(hg38,  merged_DEL_simp$chrom, merged_DEL_simp$SV_start-2 , merged_DEL_simp$SV_start-1)
+three_prime_flank <- getSeq(hg38, merged_DEL_simp$chrom, merged_DEL_simp$SV_end -2, merged_DEL_simp$SV_end -1)
+deleted_microhom <- cbind(merged_DEL_simp, tibble(five_prime_flank = as.character(five_prime_flank), 
+                                three_prime_flank = as.character(three_prime_flank))) %>%
+  group_by(ID, SampleID) %>%
+  mutate(mh_2bp = five_prime_flank==three_prime_flank)
+
+
+
+deleted_microhom %>%
+  ggplot(aes(x = mh_2bp, fill = changed))+
+  geom_bar(stat = "count", position = "fill")+
+  facet_wrap(~HR+alt_name, scales = "free_x")
+
+```
+
+##PDX motif validation
+
+```{r}
+pdx_DEL_seq <- merged_DEL_simp %>% 
+  filter(SV_len+40 <= 5000) %>%
+  mutate(start = SV_start - 20, end = SV_end +20) %>%
+  rbind(merged_DEL_simp %>% 
+          filter(SV_len+40 > 5000,SV_len+40 <= 10000 ) %>%
+          mutate(start = SV_start - 20, end = (SV_start+SV_end)/2,
+                 ID = paste0(ID,"_u"))) %>%
+  rbind(merged_DEL_simp %>% 
+          filter(SV_len+40 > 5000,SV_len+40 <= 10000 ) %>%
+          mutate(start = (SV_start+SV_end)/2+1, end = SV_end+20,
+                 ID = paste0(ID,"_d"))) %>%
+  rbind(merged_DEL_simp %>% 
+          filter(SV_len+40 > 10000 ) %>%
+          mutate(start = SV_start - 20, end = SV_start-20 +5000,
+                 ID = paste0(ID,"_u"))) %>%
+  rbind(merged_DEL_simp %>% 
+          filter(SV_len+40 > 10000 ) %>%
+          mutate(start = SV_end +20 - 5000, end = SV_end +20,
+                 ID = paste0(ID,"_d")))%>%
+  mutate(ID = paste0(ID, "_", gsub(" ", "", gsub("#", "", alt_name)))) %>%
+  rowwise() %>%
+  mutate(range = list(GRanges(chrom, IRanges(start, end)))) %>%
+  arrange(SampleID, ID)
+
+
+pileup_params <- PileupParam(
+    distinguish_nucleotides = TRUE,
+    distinguish_strands = FALSE,
+    min_base_quality = 20,
+    min_mapq = 20)
+
+pdx_DEL_seq_D <- pdx_DEL_seq%>%
+                          filter(changed == "Decrease")
+_
+new_reads <- pdx_DEL_seq_D %>%
+  group_by(SampleID, ID) %>%
+  group_map(~ pileup(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bam"),
+                      index = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bai"),
+                       scanBamParam = ScanBamParam(which = .x$range[[1]]),
+                           pileupParam = pileup_params ))
+
+
+consensus <- lapply(new_reads, function(x) x%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <- pdx_DEL_seq_D$ID
+
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_loss_sequences_pdx.fasta")
+
+
+pdx_DEL_seq_R <- pdx_DEL_seq%>%
+                          filter(changed == "No Change")
+
+new_reads <- pdx_DEL_seq_R %>%
+  group_by(SampleID, ID) %>%
+  group_map(~ pileup(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bam"),
+                      index = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bai"),
+                       scanBamParam = ScanBamParam(which = .x$range[[1]]),
+                           pileupParam = pileup_params ))
+
+
+consensus <- lapply(new_reads, function(x) x%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <- pdx_DEL_seq_R$ID
+
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_ref_sequences_pdx.fasta")
+
+```
+
+##PDX motif validation --fusion
+
+```{r}
+pdx_DEL_seq_up <- merged_DEL_simp %>% 
+  mutate(ID = paste0(ID, "_", gsub(" #", "", alt_name))) %>%
+  mutate(range = list(GRanges(chrom, IRanges(SV_start-40, SV_start)))) %>%
+  arrange(SampleID, ID)
+
+
+pileup_params <- PileupParam(
+    distinguish_nucleotides = TRUE,
+    distinguish_strands = FALSE,
+    min_base_quality = 20,
+    min_mapq = 20)
+
+pdx_DEL_seq_D <- pdx_DEL_seq%>%
+                          filter(changed == "Decrease")
+
+new_reads <- pdx_DEL_seq_D %>%
+  group_by(SampleID, ID) %>%
+  group_map(~ pileup(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bam"),
+                      index = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bai"),
+                       scanBamParam = ScanBamParam(which = .x$range[[1]]),
+                           pileupParam = pileup_params ))
+
+
+consensus <- lapply(new_reads, function(x) x%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <- pdx_DEL_seq_D$ID
+
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_loss_sequences_pdx.fasta")
+
+
+pdx_DEL_seq_R <- pdx_DEL_seq%>%
+                          filter(changed == "No Change")
+
+new_reads <- pdx_DEL_seq_R %>%
+  group_by(SampleID, ID) %>%
+  group_map(~ pileup(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bam"),
+                      index = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID),"/",unique(.y$SampleID),"_mapped_sc.bai"),
+                       scanBamParam = ScanBamParam(which = .x$range[[1]]),
+                           pileupParam = pileup_params ))
+
+
+consensus <- lapply(new_reads, function(x) x%>%
+  filter(nucleotide != "-") %>%
+  group_by(pos) %>%
+  slice_max(count, n = 1, with_ties = FALSE) %>%
+  arrange(pos) %>%
+  summarise(base = dplyr::first(nucleotide)) %>%
+  pull(base) %>%
+  paste(collapse = ""))
+consensus_seq <- unlist(consensus)
+names(consensus_seq) <- pdx_DEL_seq_R$ID
+
+DNA_set <- DNAStringSet(consensus_seq)
+writeXStringSet(DNA_set, filepath = "output/landing_pad_mapping/DEL_sig_meth_ref_sequences_pdx.fasta")
+
+```
+
+##promoter gene body
+
+```{r}
+promoter <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/EDPnew_20240409.bed")
+gene_body <- fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/supporting/MANE.GRCh38.v1.3.ensembl_genomic_transcript.gtf") %>%
+  dplyr::select(CHR =V1, chromStart = V4, chromEnd = V5)
+gene_annotation <- rbind(promoter %>%
+                           dplyr::select(chrom = `#chrom`, chromStart, chromEnd) %>%
+                           mutate(type = "Promoter"),
+                         gene_body %>%
+                           dplyr::rename(chrom = CHR) %>%
+                           mutate(type = "Gene Body"))
+
+alt_combined_annot_GENE <- merged_DEL_simp%>%
+  dplyr::select(chrom, SV_start, SV_end, ID,  changed_n, alt_len = SV_len) %>%
+  left_join(gene_annotation, by = join_by(chrom == chrom, SV_start <= chromEnd, SV_end >=chromStart)) %>%
+  mutate(type = if_else(is.na(type), "Intergenic", type)) %>%
+  group_by(chrom, SV_start, SV_end, ID, changed_n) %>%
+  summarise(type = paste(unique(type), collapse = ", ")) %>%
+  ungroup() %>%
+  mutate(priority_type = case_when(str_detect(type, "Promoter") ~ "Promoter",
+                                   str_detect(type, "Gene Body") ~ "Gene Body",
+                                    TRUE~ "Intergenic"))
+  alt_combined_annot_GENE %>%
+  mutate(changed  = changed_n >=1) %>%
+  group_by(changed, priority_type) %>%
+  summarise(subtype_n = n()) %>%
+  ungroup() %>%
+  mutate(priority_type = factor(priority_type, levels = c("Promoter", "Gene Body", "Intergenic")),
+         changed = factor(changed)) %>%
+  ggplot(aes(x = changed, y= subtype_n , fill = priority_type))+
+  geom_bar(stat = "identity", position = "fill", color = "black")+
+  geom_text(aes(label = paste0("N=", subtype_n)), position =position_fill(vjust = 0.5) )+
+  scale_fill_manual(values =c("Promoter"= "#7d4f50", "Gene Body" = "#cc8b86", "Intergenic" ="#f9eae1"), "Gene Context")+
+  scale_y_continuous(labels = scales::percent, "Sequence alteration breakpoints")+
+  theme_bw()+
+  xlab("From events with CpG changed (N>=1)")+
+  theme(legend.position = "bottom")
+  
+  ggsave("plots/all_break_points_gene_context.pdf", height = 5, width = 5.5)
+  
+  
+  alt_combined_annot_GENE  %>%
+  ungroup() %>%
+  mutate(priority_type = factor(priority_type, levels = c("Promoter", "Gene Body", "Intergenic")),
+         changed = factor(changed)) %>%
+    filter(priority_type == "Promoter")
+```
+
+#cut and run
+
+```{r}
+library(ComplexHeatmap)
+ovcar8_pooled_k27me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_1/H3K27me3_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k4me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_1/H3K4me3POS_peaks.narrowPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k4me1 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_1/H3K4me1_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k9me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_1/H3K9me3_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k27me3_rep <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8/OVCAR8_H3K27me3_rep2_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k4me3_rep <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8/OVCAR8_H3K4me3_rep2_peaks.narrowPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k4me1_rep <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8/OVCAR8_H3K4me1_rep2_peaks.narrowPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k9me3_rep <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8/OVCAR8_H3K9me3_rep2_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+ovcar8_pooled_k9me3_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k9me3, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+ovcar8_pooled_k27me3_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k27me3, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+ovcar8_pooled_k4me3_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k4me3, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+ovcar8_pooled_k4me1_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k4me1, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+ovcar8_pooled_k9me3_rep_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k9me3_rep, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+ovcar8_pooled_k27me3_rep_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k27me3_rep, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+ovcar8_pooled_k4me3_rep_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k4me3_rep, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+ovcar8_pooled_k4me1_rep_gr <- makeGRangesFromDataFrame(ovcar8_pooled_k4me1_rep, seqnames.field = "V1", start.field = "V2", end.field = "V3", ignore.strand = T )
+
+ovcar8_k9me3_overlap <- data.frame(keep_bigger_overlaps(ovcar8_pooled_k9me3_gr, ovcar8_pooled_k9me3_rep_gr))
+ovcar8_k27me3_overlap <-  data.frame(keep_bigger_overlaps(ovcar8_pooled_k27me3_gr, ovcar8_pooled_k27me3_rep_gr))
+
+ovcar8_repressive <- reduce(c(keep_bigger_overlaps(ovcar8_pooled_k9me3_gr, ovcar8_pooled_k9me3_rep_gr),
+                              keep_bigger_overlaps(ovcar8_pooled_k27me3_gr, ovcar8_pooled_k27me3_rep_gr)))
+
+ovcar8_k4me3_overlap <-  data.frame(keep_bigger_overlaps(ovcar8_pooled_k4me3_gr, ovcar8_pooled_k4me3_rep_gr))
+ovcar8_k4me1_overlap <-  data.frame(keep_bigger_overlaps(ovcar8_pooled_k4me1_gr, ovcar8_pooled_k4me1_rep_gr))
+
+
+ovcar8_activating <- reduce(c(keep_bigger_overlaps(ovcar8_pooled_k4me3_gr, ovcar8_pooled_k4me3_rep_gr), 
+                              keep_bigger_overlaps(ovcar8_pooled_k4me1_gr, ovcar8_pooled_k4me1_rep_gr)))
+
+a630_pooled_k27me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K27me3_rep2_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+a630_pooled_k4me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K4me3_rep2_peaks.narrowPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+a630_pooled_k4me1 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K4me1_rep2_peaks.narrowPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+a630_pooled_k9me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K9me3_rep2_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+uwb1_pooled_k27me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/UWB1/UWB1_H3K27me3_rep1_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+uwb1_pooled_k4me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/UWB1/UWB1_H3K4me3_rep1_peaks.narrowPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+uwb1_pooled_k4me1 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/UWB1/UWB1_H3K4me1_rep1_peaks.narrowPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+uwb1_pooled_k9me3 <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/UWB1/UWB1_H3K9me3_rep1_peaks.broadPeak") %>%
+  filter(V9 >= -log10(0.05), V1 %in% paste0("chr", seq(1,22)))
+
+
+SV_simp <-  rbind(
+  CpG_indel_del_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "indel", subtype = "del")%>%
+          left_join(merged_indel_del %>%
+                      dplyr::select(ID, chrom, SV_start = start, SV_end = end) %>%
+                      distinct()) ,
+  CpG_DEL_fisher %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV", subtype = "del")%>%
+          left_join(merged_DEL %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()) ,
+  CpG_BND_fisher %>%
+        mutate(type = "SV", subtype = "bnd",
+               alt_len = 0)%>%
+    dplyr::select(-chr_end) %>%
+          left_join(merged_BND %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()),
+  CpG_DUP_fisher %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV", subtype = "bnd")%>%
+          left_join(merged_DUP %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()),
+  CpG_indel_ins_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "indel", subtype = "ins")%>%
+          left_join(merged_indel_ins %>%
+                      dplyr::select(ID, chrom, SV_start = start, SV_end = end) %>%
+                      distinct()) ,
+  CpG_INS_fisher %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV", subtype = "ins")%>%
+          left_join(merged_INS %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct())
+  )%>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len, ref_position, type, subtype) %>%
+          mutate(changed = case_when( sig & diff >0 ~ "Increase",
+                                      sig & diff <0 ~ "Decrease",
+                                   TRUE ~ "No Change"))%>%
+  ungroup() 
+
+fisher.test(matrix(c(5,223,5,52), byrow = T, nrow = 2), alternative = "less")
+```
+
+## A630 - relative change in histone mod for ALT
+
+```{r}
+num_windows <- 10
+window_size <-500
+
+# Function to create 1kb windows around a variant
+# Function to create windows around a variant
+
+OVCAR8_SV_simp <-  SV_simp%>%
+  dplyr::filter(str_detect(ID, "common") | str_detect(ID, "a630") |str_detect(ID, "h453"))
+
+extended_df <- pmap_dfr(OVCAR8_SV_simp %>%
+                          # filter(changed %in% c("No Change", "Decrease")) %>%
+                          dplyr::select(ID, chrom, SV_start, SV_end, SV_type = subtype) %>%
+                          distinct(), create_windows) %>%
+  filter(!(SV_type == "bnd"  & abs(window_start- SV_end) < abs(window_start - SV_start)))
+
+
+window_change_df <- extended_df %>%
+  left_join(OVCAR8_SV_simp %>%
+              dplyr::select(ref_position, chrom, sig, type, subtype, changed,
+                            Meth_ref, Unmeth_ref), by = join_by(chrom == chrom, window_start <= ref_position, window_end >= ref_position)) %>%
+  group_by(variant_id, chrom, ref_position) %>%
+  mutate(starting =if_else(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.8, "Ref Methylated", "Ref Unmethylated" ),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated"))) %>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, starting) %>%
+  summarise(sig = sum(sig), type = unique(type)) %>%
+  ungroup()
+
+
+window_histone <- window_change_df %>%
+  filter(!is.na(sig)) %>%
+  left_join(ovcar8_k9me3_overlap %>%
+              dplyr::select(chrom =seqnames, start, end), by = join_by(chrom == chrom, window_start <= end, window_end >= start))%>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig ,starting) %>%
+  summarise(H3K27me3_o = sum(!is.na(start))>0) %>%
+  left_join(ovcar8_k4me3_overlap %>%
+              dplyr::select(chrom =seqnames, start, end), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, type,subtype, changed, sig, starting, H3K27me3_o) %>%
+  summarise(H3K4me3_o = sum(!is.na(start))>0) %>%
+  left_join(ovcar8_k4me1_overlap %>%
+              dplyr::select(chrom =seqnames, start, end), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig, starting, H3K27me3_o, H3K4me3_o) %>%
+  summarise(H3K4me1_o = sum(!is.na(start))>0)%>%
+  left_join(ovcar8_k9me3_overlap %>%
+              dplyr::select(chrom =seqnames, start, end), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, type, changed, subtype, sig, starting, H3K27me3_o, H3K4me3_o, H3K4me1_o) %>%
+  summarise(H3K9me3_o = sum(!is.na(start))>0) %>%
+  ungroup()%>%
+  mutate(mod_o = if_else(H3K27me3_o == H3K4me3_o, H3K4me3_o+H3K4me1_o-H3K9me3_o, H3K4me3_o+H3K4me1_o -H3K27me3_o-H3K9me3_o))
+
+window_histone %>%
+  filter(starting == "Ref Methylated") %>%
+  mutate(mod_o_cat = case_when(mod_o < 0 & !H3K4me3_o & !H3K4me1_o~ "Repressive",
+                           !H3K4me3_o & !H3K4me1_o & !H3K9me3_o & !H3K27me3_o ~ "Unknown Histone Mod",
+                           mod_o > 0 & !H3K9me3_o & !H3K27me3_o~ "Activating",
+                           TRUE ~"Bivalent"),
+                           Meth_change = if_else(sig >0 , changed, "No Change"),
+         Meth_change = factor(Meth_change, levels = c("No Change", "Increase", "Decrease")),
+        mod_o_cat = factor(mod_o_cat, levels = c("Repressive",  "Activating", "Unknown Histone Mod", "Bivalent"))) %>%
+  distinct() %>%
+  group_by(mod_o_cat, Meth_change, starting) %>%
+  summarise(n = n())%>%
+  ungroup() %>%
+  group_by(mod_o_cat,  starting) %>%
+  mutate(total = sum(n), perc = n/total) %>%
+  ungroup()%>%
+  filter(mod_o_cat != "Unknown Histone Mod") %>%
+  ggplot(aes(x = mod_o_cat , y = perc, fill = Meth_change))+
+   geom_bar(stat = "identity", color = "black")+
+  theme_bw()+
+  # coord_cartesian(ylim = c(0,0.2))+
+  geom_text(aes(label =paste0("N=", n)), position = position_stack(vjust = 0.5))+
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = NA))+
+  scale_fill_manual(values = sig_change_palette, "Methylation Change")+
+  scale_y_continuous(labels = scales::percent,  "Methylation Changes within 50bp Window")+
+  xlab("Parental Cell-line Histone Mod (50bp window)")+
+  ggtitle("OVCAR8 A6-meth and H4-KO")+
+    facet_wrap(~starting, scales = "free_y")
+ggsave("plots/histone_with_del_ovcar8_cat.pdf", height = 5, width = 6)
+
+
+```
+
+```{r}
+repr_widths <- width(ovcar8_repressive )
+# Number of activating marks
+n_activ <- length(ovcar8_activating)
+
+set.seed(123)
+sampled_widths <- sample(repr_widths, size = n_activ, replace = TRUE)
+activating_resized <- resize(ovcar8_activating, width = sampled_widths, fix = "center")
+
+window_histone_norm <- window_change_df %>%
+  filter(!is.na(sig)) %>%
+  left_join(data.frame(ovcar8_repressive) %>%
+              dplyr::select(chrom =seqnames, start, end), by = join_by(chrom == chrom, window_start <= end, window_end >= start))%>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig ,starting) %>%
+  summarise(repress_o = sum(!is.na(start))>0) %>%
+  left_join(data.frame(activating_resized) %>%
+              dplyr::select(chrom =seqnames, start, end), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, type,subtype, changed, sig, starting, repress_o) %>%
+  summarise(actviating_o = sum(!is.na(start))>0) %>%
+  ungroup()%>%
+  mutate(mod_o = actviating_o-repress_o)
+
+
+
+window_histone_norm %>%
+  filter(starting == "Ref Methylated") %>%
+  mutate(mod_o_cat = case_when(mod_o < 0 ~ "Repressive",
+                           mod_o > 0 ~ "Activating",
+                           TRUE ~"Unknown Histone Mod"),
+                           Meth_change = if_else(sig >0 , changed, "No Change"),
+         Meth_change = factor(Meth_change, levels = c("No Change", "Increase", "Decrease")),
+        mod_o_cat = factor(mod_o_cat, levels = c("Repressive",  "Activating", "Unknown Histone Mod"))) %>%
+  distinct() %>%
+  group_by(mod_o_cat, Meth_change, starting) %>%
+  summarise(n = n())%>%
+  ungroup() %>%
+  group_by(mod_o_cat,  starting) %>%
+  mutate(total = sum(n), perc = n/total) %>%
+  ungroup()%>%
+  filter(mod_o_cat != "Unknown Histone Mod") %>%
+  ggplot(aes(x = mod_o_cat , y = perc, fill = Meth_change))+
+   geom_bar(stat = "identity", color = "black")+
+  theme_bw()+
+  # coord_cartesian(ylim = c(0,0.2))+
+  geom_text(aes(label =paste0("N=", n)), position = position_stack(vjust = 0.5))+
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = NA))+
+  scale_fill_manual(values = sig_change_palette, "Methylation Change")+
+  scale_y_continuous(labels = scales::percent,  "Methylation Changes within 50bp Window")+
+  xlab("Parental Cell-line Histone Mod (50bp window)")+
+  ggtitle("OVCAR8 A6-meth and H4-KO")+
+    facet_wrap(~starting, scales = "free_y")
+ggsave("plots/histone_with_del_ovcar8_cat_NORM_WIDTH.pdf", height = 5, width = 6)
+
+library(ggalluvial)
+
+o_a_histone_change <- window_histone %>%
+  full_join(window_histone_a) %>%
+  filter(starting == "Ref Methylated") %>%
+  mutate(mod_o_cat = case_when(mod_o < 0 & !H3K4me3_o & !H3K4me1_o~ "Repressive",
+                           !H3K4me3_o & !H3K4me1_o & !H3K9me3_o & !H3K27me3_o ~ "No Histone Mod",
+                           mod_o > 0 & !H3K9me3_o & !H3K27me3_o~ "Activating",
+                           TRUE ~"Bivalent"),
+                           Meth_change = if_else(sig >0 , changed, "No Change"),
+         Meth_change = factor(Meth_change, levels = c("No Change", "Increase", "Decrease")),
+        mod_o_cat = factor(mod_o_cat, levels = c("Repressive", "No Histone Mod", "Activating", "Bivalent")),
+        mod_a_cat = case_when(mod_a < 0 & !H3K4me3_a & !H3K4me1_a~ "Repressive",
+                           !H3K4me3_a & !H3K4me1_a & !H3K9me3_a & !H3K27me3_o ~ "No Histone Mod",
+                           mod_a > 0 & !H3K9me3_a & !H3K27me3_a~ "Activating",
+                           TRUE ~"Bivalent"),
+        mod_a_cat = factor(mod_a_cat, levels = c("Repressive", "No Histone Mod", "Activating", "Bivalent"))) %>%
+  distinct() 
+
+
+o_a_histone_change %>%
+  group_by(mod_o_cat, mod_a_cat, Meth_change) %>%
+  summarise(N = n()) %>%
+  ungroup() %>%
+  filter(mod_o_cat != "No Histone Mod") %>%
+  ggplot(aes(axis1 = mod_o_cat, axis2 = mod_a_cat, y = N, label = mod_o_cat))+
+  geom_alluvium(aes(fill = Meth_change)) +
+  geom_stratum()+
+  geom_text(stat = "stratum", aes(label = after_stat(stratum)))+
+  theme_minimal()
+
+# window_histone_a <- window_change_df %>%
+#   filter(!is.na(sig)) %>%
+#   left_join(a630_pooled_k27me3 %>%
+#               dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start))%>%
+#   group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig , starting) %>%
+#   summarise(H3K27me3_a = sum(!is.na(start))>0) %>%
+#   left_join(a630_pooled_k4me3 %>%
+#               dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+#   group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig, starting, H3K27me3_a) %>%
+#   summarise(H3K4me3_a = sum(!is.na(start))>0) %>%
+#   left_join(a630_pooled_k4me1 %>%
+#               dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+#   group_by(variant_id, chrom, window_start, window_end, type,subtype,  changed, sig, starting, H3K27me3_a, H3K4me3_a) %>%
+#   summarise(H3K4me1_a = sum(!is.na(start))>0)%>%
+#   left_join(a630_pooled_k9me3 %>%
+#               dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+#   group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig, starting, H3K27me3_a, H3K4me3_a, H3K4me1_a) %>%
+#   summarise(H3K9me3_a = sum(!is.na(start))>0) %>%
+#   ungroup()%>%
+#   mutate(mod_a = if_else(H3K27me3_a == H3K4me3_a, H3K4me3_a+H3K4me1_a-H3K9me3_a, H3K4me3_a+H3K4me1_a -H3K27me3_a-H3K9me3_a))
+
+
+
+# window_histone %>%
+#   full_join(window_histone_a) %>%
+#   mutate(mod_o_cat = case_when(mod_o < 0 ~ "OVCAR8: Repressive",
+#                            mod_o == 0 ~ "OVCAR8: No Histone Mod",
+#                            mod_o > 0 ~ "OVCAR8: Activating"),
+#          changed_in_mod = case_when(mod_a - mod_o == -2 ~ "Rep (+2)",
+#                                     mod_a - mod_o == -1 ~ "Rep (+1)",
+#                                     mod_a - mod_o == 0 ~ "No Change",
+#                                     mod_a - mod_o == 1 ~ "Act (+1)",
+#                                     mod_a - mod_o == 2 ~ "Act (+2)"),
+#          changed_in_mod = factor(changed_in_mod, levels = c("Rep (+2)", "Rep (+1)", "No Change", "Act (+1)", "Act (+2)")),
+#          Meth_change = if_else(sig >0, changed, "No Change"),
+#          Meth_change = factor(Meth_change, levels = c("No Change", "Increase", "Decrease")),
+#         mod_o_cat = factor(mod_o_cat, levels = c("OVCAR8: Repressive", "OVCAR8: No Histone Mod", "OVCAR8: Activating"))) %>%
+#   distinct() %>%
+#   group_by(mod_o_cat, Meth_change, changed_in_mod, starting) %>%
+#   summarise(n = n())%>%
+#   ungroup() %>%
+#   ggplot(aes(x = changed_in_mod , y = n, fill = Meth_change))+
+#    geom_bar(stat = "identity", color = "black")+
+#   theme_bw()+
+#   geom_text(aes(label =paste0("N=", n)), position = position_stack(vjust = 0.5))+
+#     scale_y_continuous(transform = "pseudo_log", "Methylation Changes within 50bp Window",)+
+#   theme(legend.position = "bottom")+
+#   scale_fill_manual(values = sig_change_palette, "Methylation Change")+
+#   xlab("Change in OVCAR8 LP A6-30 Histone Mod (relative to OVCAR8)")+
+#   ggtitle("OVCAR8 LP A6-30")+
+#     facet_wrap(~starting+ mod_o_cat, scales = "free_y")
+```
+
+#permutation for breakpoint overlapped with repressive markers
+
+```{r}
+OVCAR8_SV_simp  <-  SV_simp%>%
+  dplyr::filter(str_detect(ID, "common") | str_detect(ID, "a630") |str_detect(ID, "h453")) %>%
+                          dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                          distinct()
+
+breakpoints <- makeGRangesFromDataFrame(
+  OVCAR8_SV_simp,
+  seqnames.field = "chrom",
+  start.field = "SV_start",
+  end.field = "SV_start",  # same as start for points
+  ignore.strand = TRUE
+)
+
+ovcar8_pooled_rep_gr <- reduce(c(keep_bigger_overlaps(ovcar8_pooled_k9me3_gr, ovcar8_pooled_k9me3_rep_gr), 
+                                 keep_bigger_overlaps(ovcar8_pooled_k27me3_gr, ovcar8_pooled_k27me3_rep_gr)))
+ovcar8_pooled_act_gr <- reduce(c(keep_bigger_overlaps(ovcar8_pooled_k4me3_gr, ovcar8_pooled_k4me3_rep_gr),
+                                 keep_bigger_overlaps(ovcar8_pooled_k4me1_gr, ovcar8_pooled_k4me1_rep_gr)))
+
+overlap_hits <- findOverlaps(ovcar8_pooled_rep_gr, ovcar8_pooled_act_gr)
+
+strict_repressive <-ovcar8_pooled_rep_gr[-unique(queryHits(overlap_hits))]
+strict_activating <- ovcar8_pooled_act_gr[-unique(queryHits(overlap_hits))]
+library(regioneR)
+
+overlap_info <- overlapRegions(breakpoints, strict_repressive )
+
+num_overlaps <- numOverlaps(breakpoints, strict_repressive)
+cat("Number of overlaps with repressive markers:", num_overlaps, "\n")
+
+num_overlaps <- numOverlaps(breakpoints, strict_activating)
+cat("Number of overlaps with activating markers:", num_overlaps, "\n")
+
+
+set.seed(123)  # for reproducibility
+pt <- permTest(A = breakpoints,
+               B = strict_repressive,
+               ntimes = 1000,
+               randomize.function = randomizeRegions,
+               evaluate.function = numOverlaps)
+
+summary(pt)
+plot(pt)
 ```
 
 
+# a6-30 window overlay with gene body annotation
+
+```{r}
+window_histone %>%
+  left_join(gene_annotation %>%
+              dplyr::rename(annotation_type = type), by=  join_by(chrom == chrom, window_start <= chromEnd, window_end >= chromStart))%>%
+  mutate(annotation_type = if_else(is.na(annotation_type), "Intergenic", annotation_type),
+         mod_o_cat = case_when(mod_o < 0 ~ "OVCAR8: Repressive",
+                           mod_o == 0 ~ "OVCAR8: No Histone Mod",
+                           mod_o > 0 ~ "OVCAR8: Activating"),
+         Meth_change = if_else(sig >0, changed, "No Change"),
+         Meth_change = factor(Meth_change, levels = c("No Change", "Increase", "Decrease")),
+        mod_o_cat = factor(mod_o_cat, levels = c("OVCAR8: Repressive", "OVCAR8: No Histone Mod", "OVCAR8: Activating"))) %>%
+  distinct() %>%
+  group_by(mod_o_cat, Meth_change, annotation_type) %>%
+  summarise(n = n())%>%
+  ungroup() %>%
+  ggplot(aes(x = annotation_type , y = n, fill = Meth_change))+
+   geom_bar(stat = "identity", color = "black")+
+  theme_bw()+
+  geom_text(aes(label =paste0("N=", n)), position = position_stack(vjust = 0.5))+
+    scale_y_continuous(transform = "pseudo_log", "Methylation Changes within 50bp Window")+
+  theme(legend.position = "bottom")+
+  # scale_fill_manual(values = sig_change_palette, "Methylation Change")+
+    facet_wrap(~mod_o_cat , scales = "free_y")
+
+
+```
+
+## h453 and UWB1 - relative change in histone mod for DEL
+
+```{r}
+
+num_windows <- 10
+window_size <- 500
+
+#UWB1
+UWB1_SV_simp <-  SV_simp%>%
+  dplyr::filter(str_detect(ID, "_U"))
+
+extended_df <- pmap_dfr(UWB1_SV_simp %>%
+                         dplyr::select(ID, chrom, SV_start, SV_end, SV_type = subtype) %>%
+                          distinct(), create_windows) %>%
+  filter(!(SV_type == "bnd"  & abs(window_start- SV_end) < abs(window_start - SV_start)))
+
+
+window_change_df <- extended_df %>%
+  left_join(UWB1_SV_simp %>%
+              dplyr::select(ref_position, chrom, sig, type, subtype, changed,
+                            Meth_ref, Unmeth_ref), by = join_by(chrom == chrom, window_start <= ref_position, window_end >= ref_position)) %>%
+  group_by(variant_id, chrom, ref_position) %>%
+  mutate(starting =if_else(Meth_ref/ (Meth_ref +Unmeth_ref) >= 0.7, "Ref Methylated", "Ref Unmethylated" ),
+         starting = factor(starting, levels = c("Ref Methylated", "Ref Unmethylated"))) %>%
+  ungroup() %>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, starting) %>%
+  summarise(sig = sum(sig), type = unique(type)) %>%
+  ungroup()
+
+
+window_histone <- window_change_df %>%
+  filter(!is.na(sig)) %>%
+  left_join(uwb1_pooled_k27me3 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start))%>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig, starting ) %>%
+  summarise(H3K27me3_u = sum(!is.na(start))>0) %>%
+  left_join(uwb1_pooled_k4me3 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig, starting, H3K27me3_u) %>%
+  summarise(H3K4me3_u = sum(!is.na(start))>0) %>%
+  left_join(uwb1_pooled_k4me1 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig, starting, H3K27me3_u, H3K4me3_u) %>%
+  summarise(H3K4me1_u = sum(!is.na(start))>0)%>%
+  left_join(uwb1_pooled_k9me3 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, type, subtype, changed, sig, starting, H3K27me3_u, H3K4me3_u, H3K4me1_u) %>%
+  summarise(H3K9me3_u = sum(!is.na(start))>0) %>%
+  ungroup()%>%
+  mutate(mod_u = if_else(H3K27me3_u == H3K4me3_u, H3K4me3_u+H3K4me1_u-H3K9me3_u, H3K4me3_u+H3K4me1_u -H3K27me3_u-H3K9me3_u))
+
+#UWB1
+
+window_histone  %>%
+  filter(starting == "Ref Methylated") %>%
+  mutate(mod_u_cat = case_when(mod_u < 0 & !H3K4me3_u & !H3K4me1_u~ "Repressive",
+                           !H3K4me3_u & !H3K4me1_u & !H3K9me3_u & !H3K27me3_u ~ "Unknown Histone Mod",
+                           mod_u > 0 & !H3K9me3_u & !H3K27me3_u~ "Activating",
+                           TRUE ~"Bivalent"),
+         mod_u_cat = factor(mod_u_cat, levels = c("Repressive", "Activating", "Unknown Histone Mod", "Bivalent")),
+         Meth_change = if_else(sig >0, changed, "No Change"),
+         Meth_change = factor(Meth_change, levels = c("No Change", "Increase", "Decrease"))) %>%
+  group_by(mod_u_cat, Meth_change, starting) %>%
+  summarise(n = n())%>%
+  ungroup() %>%
+   group_by(mod_u_cat,  starting) %>%
+  mutate(total = sum(n), perc = n/total) %>%
+  ungroup()%>%
+  filter(mod_u_cat != "Unknown Histone Mod") %>%
+  ggplot(aes(x = mod_u_cat , y = perc, fill = Meth_change))+
+  geom_bar(stat = "identity", color = "black")+
+  theme_bw()+
+  geom_text(aes(label =paste0("N=", n)), position = position_stack(vjust = 0.5))+
+  scale_y_continuous(labels = scales::percent,  "Methylation Changes within 50bp Window",)+
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = NA))+
+  scale_fill_manual(values = sig_change_palette, "Methylation Change")+
+  xlab("Parental Cell-line Histone Mod (50bp window)")+
+  facet_wrap(~ starting)+
+  ggtitle("UWB1")
+ggsave("plots/histone_with_del_uwb1_cat.pdf", height = 5, width = 6)
+
+
+```
+
+#other code to revise (cut and run)
+
+```{r}
+DEL_simp <- rbind(CpG_indel_del_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "indel")%>%
+          left_join(merged_indel_del %>%
+                      dplyr::select(ID, chrom, SV_start = start, SV_end = end) %>%
+                      distinct()) %>%
+          mutate(sig_dist = if_else(sig, pmin(abs(ref_position -SV_start), abs(ref_position -SV_end)),9999999999999)) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+          summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change"),
+                    changed_pos_min = if_else(sig_dist == min(sig_dist)&sig, ref_position, 9999999999999)) %>%
+          ungroup()%>%
+          distinct() %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len, type) %>%
+          filter(!(n()>1 & changed_pos_min ==9999999999999 )),
+  CpG_DEL_fisher %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")%>%
+          left_join(merged_DEL %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()) %>%
+     mutate(sig_dist = if_else(sig, pmin(abs(ref_position -SV_start), abs(ref_position -SV_end)),9999999999999)) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change"),
+                    changed_pos_min = if_else(sig_dist == min(sig_dist)&sig, ref_position, 9999999999999)) %>%
+          ungroup()%>%
+          distinct() %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len, type) %>%
+          filter(!(n()>1 & changed_pos_min ==9999999999999 ))) %>%
+  ungroup() %>%
+  mutate(changed_pos_min = if_else(changed_pos_min ==9999999999999, -1, changed_pos_min)) %>%
+  filter(str_detect(ID, "_common|_a630"))
+
+h3k4me3_o_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_H3K4me3_rep1.bedGraph")
+h3k4me3_a630_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_LP_A6_30_H3K4me3_rep2.bedGraph")
+
+h3k4me1_o_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_H3K4me1_rep1.bedGraph")
+h3k4me1_a630_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_LP_A6_30_H3K4me1_rep2.bedGraph")
+
+
+h3k9me3_o_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_H3K9me3_rep1.bedGraph")
+h3k9me3_a630_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_LP_A6_30_H3K9me3_rep2.bedGraph")
+
+
+h3k27me3_o_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_H3K27me3_rep1.bedGraph")
+h3k27me3_a630_norm <- fread("/working/lab_olgak/lijunX/20241202_CUT_RUN/data/scaled_coverage/OVCAR8_LP_A6_30_H3K27me3_rep2.bedGraph")
+
+h3k4me3_comparison <- DEL_simp %>%
+  distinct() %>%
+  left_join(h3k4me3 %>%
+              filter(SampleID == "OVCAR8"), by = join_by(chrom == chr)) %>%
+  mutate(OVCAR8_dist = if_else(changed_pos_min == -1, pmin(abs((start+end)/2-SV_start), abs((start+end)/2-SV_end)),abs((start+end)/2 - changed_pos_min))) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(OVCAR8_dist == min(OVCAR8_dist)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  dplyr::rename(OVCAR8_signal =signalValue, OVCAR8_start = start, OVCAR8_end = end) %>%
+  left_join(h3k4me3 %>%
+              filter(SampleID == "OVCAR8_LP_A6_30"), by = join_by(chrom == chr, OVCAR8_start <= end, OVCAR8_end >= start)) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(signalValue == max(signalValue)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  distinct() %>%
+  dplyr::rename(A630_signal =signalValue, A630_start = start, A630_end = end)
+
+
+h3k4me3_comparison %>%
+  filter(changed %in% c("Decrease", "No Change")) %>%
+  left_join(h3k4me3_o_norm, by = join_by(chrom == V1, OVCAR8_start <= V3, OVCAR8_end >= V2)) %>%
+  group_by(ID) %>%
+  filter(V4 == max(V4))%>%
+  dplyr::select(-c(V3, V2))%>%
+  distinct()%>%
+  dplyr::rename(OVCAR8_peak_norm = V4) %>%
+  left_join(h3k4me3_a630_norm, by = join_by(chrom == V1, OVCAR8_start <= V3, OVCAR8_end >= V2)) %>%
+  group_by(ID) %>%
+  filter(V4 == max(V4))%>%
+  dplyr::select(-c(V3, V2))%>%
+  distinct()%>%
+  dplyr::rename(A630_peak_norm = V4)%>%
+  ggplot(aes(x = changed, y = OVCAR8_dist, color = changed))+
+  geom_boxplot()+
+  ggtitle("H3K4me3")+
+  stat_compare_means()
+
+
+h3k9me3_comparison <- DEL_simp %>%
+  distinct() %>%
+  left_join(h3k9me3 %>%
+              filter(SampleID == "OVCAR8"), by = join_by(chrom == chr)) %>%
+  mutate(OVCAR8_dist = if_else(changed_pos_min == -1, pmin(abs((start+end)/2-SV_start), abs((start+end)/2-SV_end)),abs((start+end)/2 - changed_pos_min))) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(OVCAR8_dist == min(OVCAR8_dist)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  dplyr::rename(OVCAR8_signal =signalValue, OVCAR8_start = start, OVCAR8_end = end) %>%
+  left_join(h3k9me3 %>%
+              filter(SampleID == "OVCAR8_LP_A6_30"), by = join_by(chrom == chr, OVCAR8_start <= end, OVCAR8_end >= start)) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(signalValue == max(signalValue)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  distinct() %>%
+  dplyr::rename(A630_signal =signalValue, A630_start = start, A630_end = end)
+
+
+h3k9me3_comparison %>%
+  filter(changed %in% c("Decrease", "No Change")) %>%
+  left_join(h3k9me3_o_norm, by = join_by(chrom == V1, OVCAR8_start <= V3, OVCAR8_end >= V2)) %>%
+  group_by(ID) %>%
+  filter(V4 == max(V4))%>%
+  dplyr::select(-c(V3, V2))%>%
+  distinct()%>%
+  dplyr::rename(OVCAR8_peak_norm = V4) %>%
+  left_join(h3k9me3_a630_norm, by = join_by(chrom == V1, OVCAR8_start <= V3, OVCAR8_end >= V2)) %>%
+  group_by(ID) %>%
+  filter(V4 == max(V4))%>%
+  dplyr::select(-c(V3, V2))%>%
+  distinct()%>%
+  dplyr::rename(A630_peak_norm = V4)%>%
+  ggplot(aes(x = changed, y = OVCAR8_dist, color = changed))+
+  geom_jitter()+
+  ggtitle("H3K9me3")+
+  scale_y_log10()+
+  stat_compare_means()
+
+h3k27me3_comparison <- DEL_simp %>%
+  distinct() %>%
+  left_join(h3k27me3 %>%
+              filter(SampleID == "OVCAR8"), by = join_by(chrom == chr)) %>%
+  mutate(OVCAR8_dist = if_else(changed_pos_min == -1, pmin(abs((start+end)/2-SV_start), abs((start+end)/2-SV_end)),abs((start+end)/2 - changed_pos_min))) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(OVCAR8_dist == min(OVCAR8_dist)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  dplyr::rename(OVCAR8_signal =signalValue, OVCAR8_start = start, OVCAR8_end = end) %>%
+  left_join(h3k27me3 %>%
+              filter(SampleID == "OVCAR8_LP_A6_30"), by = join_by(chrom == chr, OVCAR8_start <= end, OVCAR8_end >= start)) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(signalValue == max(signalValue)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  distinct() %>%
+  dplyr::rename(A630_signal =signalValue, A630_start = start, A630_end = end)
+
+
+h3k27me3_comparison %>%
+  filter(changed %in% c("Decrease", "No Change")) %>%
+  left_join(h3k27me3_o_norm, by = join_by(chrom == V1, OVCAR8_start <= V3, OVCAR8_end >= V2)) %>%
+  group_by(ID) %>%
+  filter(V4 == max(V4))%>%
+  dplyr::select(-c(V3, V2))%>%
+  distinct()%>%
+  dplyr::rename(OVCAR8_peak_norm = V4) %>%
+  left_join(h3k27me3_a630_norm, by = join_by(chrom == V1, OVCAR8_start <= V3, OVCAR8_end >= V2)) %>%
+  group_by(ID) %>%
+  filter(V4 == max(V4))%>%
+  dplyr::select(-c(V3, V2))%>%
+  distinct()%>%
+  dplyr::rename(A630_peak_norm = V4)%>%
+  ggplot(aes(x = changed, y = OVCAR8_dist, color = changed))+
+  geom_jitter()+
+  ggtitle("h3k27me3")+
+  stat_compare_means()+facet_wrap(~type)+
+  scale_y_log10()
+
+
+h3k4me1_comparison <- DEL_simp %>%
+  distinct() %>%
+  left_join(h3k4me1 %>%
+              filter(SampleID == "OVCAR8"), by = join_by(chrom == chr)) %>%
+  mutate(OVCAR8_dist = if_else(changed_pos_min == -1, pmin(abs((start+end)/2-SV_start), abs((start+end)/2-SV_end)),abs((start+end)/2 - changed_pos_min))) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(OVCAR8_dist == min(OVCAR8_dist)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  dplyr::rename(OVCAR8_signal =signalValue, OVCAR8_start = start, OVCAR8_end = end) %>%
+  left_join(h3k4me1 %>%
+              filter(SampleID == "OVCAR8_LP_A6_30"), by = join_by(chrom == chr, OVCAR8_start <= end, OVCAR8_end >= start)) %>%
+  group_by(ID, chrom, SV_start, SV_end ,alt_len, type ) %>%
+  filter(signalValue == max(signalValue)) %>%
+  dplyr::select(-c(qvalue, SampleID)) %>%
+  ungroup() %>%
+  distinct() %>%
+  dplyr::rename(A630_signal =signalValue, A630_start = start, A630_end = end)
+
+
+
+h3k27me3_comparison %>%
+  dplyr::select(-changed_pos_min) %>%
+              dplyr::rename(OVCAR8_start_k27me3 = OVCAR8_start, 
+                            OVCAR8_end_k27me3 = OVCAR8_end,
+                            OVCAR8_signal_k27me3 = OVCAR8_signal,
+                            OVCAR8_dist_k27me3 = OVCAR8_dist, 
+                            A630_start_k27me3 = A630_start,
+                            A630_end_k27me3 = A630_end, 
+                            A630_signal_k27me3 = A630_signal) %>%
+  left_join(h3k9me3_comparison %>%
+              dplyr::select(-changed_pos_min) %>%
+              dplyr::rename(OVCAR8_start_k9me3 = OVCAR8_start, 
+                            OVCAR8_end_k9me3 = OVCAR8_end,
+                            OVCAR8_signal_k9me3 = OVCAR8_signal,
+                            OVCAR8_dist_k9me3 = OVCAR8_dist, 
+                            A630_start_k9me3 = A630_start,
+                            A630_end_k9me3 = A630_end, 
+                            A630_signal_k9me3 = A630_signal)) %>%
+  left_join(h3k4me3_comparison %>%
+              dplyr::select(-changed_pos_min) %>%
+              dplyr::rename(OVCAR8_start_k4me3 = OVCAR8_start, 
+                            OVCAR8_end_k4me3 = OVCAR8_end,
+                            OVCAR8_signal_k4me3 = OVCAR8_signal,
+                            OVCAR8_dist_k4me3 = OVCAR8_dist, 
+                            A630_start_k4me3 = A630_start,
+                            A630_end_k4me3 = A630_end, 
+                            A630_signal_k4me3 = A630_signal)) %>%
+  left_join(h3k4me1_comparison %>%
+              dplyr::select(-changed_pos_min) %>%
+              dplyr::rename(OVCAR8_start_k4me1 = OVCAR8_start, 
+                            OVCAR8_end_k4me1 = OVCAR8_end,
+                            OVCAR8_signal_k4me1 = OVCAR8_signal,
+                            OVCAR8_dist_k4me1 = OVCAR8_dist, 
+                            A630_start_k4me1 = A630_start,
+                            A630_end_k4me1 = A630_end, 
+                            A630_signal_k4me1 = A630_signal)) %>%
+  mutate(OVCAR8_dist_k27me3 = if_else((OVCAR8_start_k4me3 <= OVCAR8_end_k27me3 & 
+                                        OVCAR8_end_k4me3 >= OVCAR8_start_k27me3)|(OVCAR8_start_k4me1 <= OVCAR8_end_k27me3 & 
+                                        OVCAR8_end_k4me1 >= OVCAR8_start_k27me3), 999999, OVCAR8_dist_k27me3),
+    
+    OVCAR8_dist_rep_min = OVCAR8_dist_k27me3,
+    OVCAR8_dist_act_min = pmin(OVCAR8_dist_k4me3, OVCAR8_dist_k4me1, na.rm = T)) %>%
+  # filter(OVCAR8_dist_rep_min <= 1000000) %>%
+  filter(changed %in% c("Decrease", "No Change")) %>%
+  ggplot(aes(x = OVCAR8_dist_rep_min,  color = changed))+
+  geom_density()
+
+```
+
+```{r}
+
+histone_marker_del <- A630_SV_simp %>%
+  left_join(h3k27me3, by = join_by(chrom == chr, SV_start <= end, SV_end >= start))  %>%
+  group_by(ID, chrom, SV_start, SV_end, alt_len, changed ) %>%
+  summarise(h3k27me3 = if_else(is.na(SampleID), NA, paste0(unique(SampleID), collapse = ", ")))%>%
+  ungroup()%>%
+  left_join(h3k4me3, by = join_by(chrom == chr, SV_start <= end, SV_end >= start))  %>%
+  group_by(ID, chrom, SV_start, SV_end, alt_len, changed, h3k27me3) %>%
+  summarise(h3k4me3 = if_else(is.na(SampleID), NA, paste0(unique(SampleID), collapse = ", ")))%>%
+  ungroup()%>%
+  left_join(h3k4me1, by = join_by(chrom == chr, SV_start <= end, SV_end >= start))  %>%
+  group_by(ID, chrom, SV_start, SV_end, alt_len, changed, h3k27me3, h3k4me3) %>%
+  summarise(h3k4me1 = if_else(is.na(SampleID), NA, paste0(unique(SampleID), collapse = ", ")))%>%
+  ungroup()%>%
+  left_join(h3k9me3, by = join_by(chrom == chr, SV_start <= end, SV_end >= start))  %>%
+  group_by(ID, chrom, SV_start, SV_end, alt_len, changed, h3k27me3, h3k4me3, h3k4me1) %>%
+  summarise(h3k9me3 = if_else(is.na(SampleID), NA, paste0(unique(SampleID), collapse = ", "))) %>%
+  distinct() %>%
+  ungroup() %>%
+  group_by(ID, chrom, alt_len, changed) %>%
+  summarise(h3k9me3 =paste0(na.omit(unique(h3k9me3)), collapse = ", "),
+            h3k27me3 = paste0(na.omit(unique(h3k27me3)), collapse = ", "),
+            h3k4me3 = paste0(na.omit(unique(h3k4me3)), collapse = ", "),
+            h3k4me1 = paste0(na.omit(unique(h3k4me1)), collapse = ", "))
+
+
+histone_marker_del %>%
+  # filter(alt_len > 50) %>%
+  distinct() %>%
+  ggplot(aes(x = changed, fill = h3k27me3))+
+  geom_bar(stat = "count")
+
+histone_marker_del %>%
+  filter(alt_len > 50) %>%
+  distinct() %>%
+  ggplot(aes(x = changed, fill = h3k4me3))+
+  geom_bar(stat = "count")
+
+
+histone_marker_del %>%
+  filter(alt_len > 50) %>%
+  distinct() %>%
+  ggplot(aes(x = changed, fill = h3k4me1))+
+  geom_bar(stat = "count")
+
+histone_marker_del %>%  
+  filter(alt_len > 50) %>%
+  distinct() %>%
+  ggplot(aes(x = changed, fill = h3k9me3))+
+  geom_bar(stat = "count")
+
+histone_marker_del %>%filter(!is.na(h3k4me3))
+
+
+h3k4me3 %>%
+  filter(SampleID == "OVCAR8")
+```
+
+```{r}
+num_windows <- 100
+window_size <- 50
+
+# Function to create 1kb windows around a variant
+# Function to create windows around a variant
+
+extended_df <- pmap_dfr(A630_SV_simp %>%
+                          filter(changed %in% c("No Change", "Decrease")) %>%
+                          dplyr::select(ID, chrom, SV_start, SV_end), create_windows)
+
+
+#OVCAR8 Parental
+alt_hist_mod <- extended_df %>%
+  group_by(variant_id) %>%
+  mutate(window_num = row_number()) %>%
+  ungroup()%>%
+  left_join(ovcar8_pooled_k27me3 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, window_num ) %>%
+  summarise(H3K27me3 = sum(!is.na(start))>0) %>%
+  left_join(ovcar8_pooled_k4me3 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, window_num, H3K27me3) %>%
+  summarise(H3K4me3 = sum(!is.na(start))>0) %>%
+  left_join(ovcar8_pooled_k4me1 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, window_num, H3K27me3, H3K4me3) %>%
+  summarise(H3K4me1 = sum(!is.na(start))>0)%>%
+  left_join(ovcar8_pooled_k9me3 %>%
+              dplyr::select(chrom =V1, start = V2, end = V3), by = join_by(chrom == chrom, window_start <= end, window_end >= start)) %>%
+  group_by(variant_id, chrom, window_start, window_end, window_num, H3K27me3, H3K4me3, H3K4me1) %>%
+  summarise(H3K9me3 = sum(!is.na(start))>0) %>%
+  ungroup()%>%
+  mutate(mod = if_else(H3K27me3 == H3K4me3, H3K4me3+H3K4me1-H3K9me3, H3K4me3+H3K4me1 -H3K27me3-H3K9me3))
+  # mutate(mod =as.numeric(H3K9me3))
+
+mat <- alt_hist_mod %>%
+  dplyr::select(variant_id, window_num, mod) %>%
+  pivot_wider(names_from = window_num, values_from = mod) %>%
+  left_join(A630_SV_simp %>%
+              ungroup() %>%
+              dplyr::select(variant_id = ID, changed) %>%
+              distinct())   %>%
+  column_to_rownames("variant_id")
+
+mat_change_annot <-as.matrix(mat["changed"]) 
+
+
+
+hm <- Heatmap(mat %>%
+                dplyr::select(-changed), show_column_names = F,show_row_names = F, cluster_columns = F,left_annotation = rowAnnotation(change = mat_change_annot), row_km = 3)
+
+pdf("plots/heatmap_merge_act_rep.pdf")
+draw(hm)
+dev.off()
+
+r.dend= row_dend(hm)
+rcl.list <- row_order(hm) 
+clu_df <- lapply(1:length(rcl.list), function(i){
+
+  out <- data.frame(ID = rownames(mat)[rcl.list[[i]]],
+                    Cluster = paste0("cluster", i),
+                    stringsAsFactors = FALSE)
+      return(out)
+    }) %>%  
+      do.call(rbind, .)
+
+clu_df %>%
+  inner_join(A630_SV_simp %>%
+              dplyr::select(ID, changed)) %>%
+  group_by(Cluster, changed) %>%
+  summarise( N= n())
+
+
+
+
+A630_SV_simp <-  rbind(CpG_indel_del_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "indel")%>%
+          left_join(merged_indel_del %>%
+                      dplyr::select(ID, chrom, SV_start = start, SV_end = end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+          summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")),
+  CpG_DEL_fisher %>%
+        dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")%>%
+          left_join(merged_DEL %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")),
+  CpG_indel_ins_fisher %>%
+        dplyr::rename(alt_len = indel_size) %>%
+        mutate(type = "indel")%>%
+          left_join(merged_indel_ins %>%
+                      dplyr::select(ID, chrom, SV_start = start, SV_end = end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+          summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change")),
+  CpG_INS_fisher %>%
+    dplyr::rename(alt_len = SV_len) %>%
+        mutate(type = "SV")%>%
+          left_join(merged_INS %>%
+                      dplyr::select(ID, chrom, SV_start, SV_end) %>%
+                      distinct()) %>%
+          group_by(ID, chrom, SV_start, SV_end ,alt_len) %>%
+  summarise(changed = case_when( max(diff) >= 0.8 & sum(sig) & min(diff) <= -0.8  ~ "Bi-Directional",
+                                   max(diff) >= 0.8 & sum(sig) > 0 ~ "Increase",
+                                   min(diff) <= -0.8 & sum(sig) > 0 ~ "Decrease" ,
+                                   TRUE ~ "No Change"))
+  )%>%
+  dplyr::filter(str_detect(ID, "common") | str_detect(ID, "a630"))
+
+
+h3k27me3 <- c("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8/OVCAR8_rep1_2_pooled_H3K27me3_peaks.broadPeak",
+                  "/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K27me3_rep2_peaks.broadPeak") %>%
+  map_dfr(~ fread(.x)%>%
+            filter(V9 >= -log10(0.05)) %>%
+   dplyr::select(1:3, 7, 9)  %>%
+     `colnames<-`(c("chr", "start", "end","signalValue", "qvalue")) %>%
+                    mutate(SampleID =sub(".*/macs3/([^/]+)/.*", "\\1", .x))) %>%
+  filter(chr %in% paste0("chr", seq(1,22)))
+
+
+h3k4me1 <- c("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_1/H3K4me1_peaks.narrowPeak",
+                  "/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K4me1_rep2_peaks.narrowPeak") %>%
+  map_dfr(~ fread(.x)%>%
+            filter(V9 >= -log10(0.05)) %>%
+   dplyr::select(1:3, 7, 9)  %>%
+     `colnames<-`(c("chr", "start", "end","signalValue", "qvalue")) %>%
+                    mutate(SampleID =gsub("_1", "", sub(".*/macs3/([^/]+)/.*", "\\1", .x))))%>%
+  filter(chr %in% paste0("chr", seq(1,22)))
+
+h3k4me3 <- c("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_1/H3K4me3POS_peaks.narrowPeak",
+                  "/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K4me3_rep2_peaks.narrowPeak") %>%
+  map_dfr(~ fread(.x)%>%
+            filter(V9 >= -log10(0.05)) %>%
+  dplyr::select(1:3, 7, 9)  %>%
+     `colnames<-`(c("chr", "start", "end","signalValue", "qvalue")) %>%
+                    mutate(SampleID =gsub("_1", "", sub(".*/macs3/([^/]+)/.*", "\\1", .x))))%>%
+  filter(chr %in% paste0("chr", seq(1,22)))
+
+
+
+h3k9me3 <- c("/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_1/H3K9me3_peaks.broadPeak",
+                  "/working/lab_olgak/lijunX/20241202_CUT_RUN/output/macs3/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_H3K9me3_rep2_peaks.broadPeak")%>%
+  map_dfr(~ fread(.x)%>%
+            filter(V9 >= -log10(0.05)) %>%
+   dplyr::select(1:3, 7, 9)  %>%
+     `colnames<-`(c("chr", "start", "end","signalValue", "qvalue")) %>%
+                    mutate(SampleID =gsub("_1", "", sub(".*/macs3/([^/]+)/.*", "\\1", .x))))%>%
+  filter(chr %in% paste0("chr", seq(1,22)))
+
+# h3k4me3 consistency 
+
+h3k4me3 %>%
+  filter(SampleID == "OVCAR8") %>%
+  dplyr::select(chr, start_O = start, end_O = end) %>%
+  full_join(h3k4me3 %>%
+  filter(SampleID == "OVCAR8_LP_A6_30") %>%
+  dplyr::select(chr, start_A = start, end_A = end),
+  by = join_by(chr == chr, start_O <= end_A, end_O >= start_A)) %>%
+  mutate(Sample = case_when(!is.na(start_O) & !is.na(start_A) ~ "Common", 
+                            is.na(start_O) & !is.na(start_A) ~ "A6-30 only",
+                            !is.na(start_O) & is.na(start_A) ~ "Parental only"))%>%
+  ggplot(aes(x = Sample, fill = Sample)) +
+  geom_bar(stat = "count")
+
+
+# h3k4me1 consistency 
+
+h3k4me1 %>%
+  filter(SampleID == "OVCAR8") %>%
+  dplyr::select(chr, start_O = start, end_O = end) %>%
+  full_join(h3k4me1 %>%
+  filter(SampleID == "OVCAR8_LP_A6_30") %>%
+  dplyr::select(chr, start_A = start, end_A = end),
+  by = join_by(chr == chr, start_O <= end_A, end_O >= start_A)) %>%
+  mutate(Sample = case_when(!is.na(start_O) & !is.na(start_A) ~ "Common", 
+                            is.na(start_O) & !is.na(start_A) ~ "A6-30 only",
+                            !is.na(start_O) & is.na(start_A) ~ "Parental only")) %>%
+  ggplot(aes(x = Sample, fill = Sample)) +
+  geom_bar(stat = "count")
+
+
+h3k9me3 %>%
+  filter(SampleID == "OVCAR8") %>%
+  dplyr::select(chr, start_O = start, end_O = end) %>%
+  full_join(h3k9me3 %>%
+  filter(SampleID == "OVCAR8_LP_A6_30") %>%
+  dplyr::select(chr, start_A = start, end_A = end),
+  by = join_by(chr == chr, start_O <= end_A, end_O >= start_A)) %>%
+  mutate(Sample = case_when(!is.na(start_O) & !is.na(start_A) ~ "Common", 
+                            is.na(start_O) & !is.na(start_A) ~ "A6-30 only",
+                            !is.na(start_O) & is.na(start_A) ~ "Parental only")) %>%
+  ggplot(aes(x = Sample, fill = Sample)) +
+  geom_bar(stat = "count")
+  
+
+
+```

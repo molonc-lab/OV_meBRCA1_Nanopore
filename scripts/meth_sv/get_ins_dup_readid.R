@@ -8,7 +8,6 @@ if (length(args) < 2) {
 wk_dir <- args[1]
 SampleID <- args[2]
 
-
 suppressMessages(suppressWarnings(library(data.table)))
 suppressMessages(suppressWarnings(library(dplyr)))
 suppressMessages(suppressWarnings(library(tidyverse)))
@@ -20,12 +19,25 @@ sv_merged <- readRDS(paste0(sample_folder, "/", SampleID, "_sv_merged.RDS"))
 read_mapping <- readRDS(paste0(sample_folder, "/", SampleID, "_read_mapping.RDS"))
 
 sv_merged %>%
-  filter(str_detect(ALT, "INS")) %>%
+  filter(SV_type == "INS") %>%
   arrange(ID) %>%
   dplyr::select(ID) %>%
   left_join(read_mapping%>%
-            dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+            dplyr::select(ID, read_id, read_type)) %>%
   filter(read_type == "alt") %>%
   pull(read_id) %>%
   unique(.)%>%
   write_lines(paste0(sample_folder, "/ins_read_name.tsv"))
+
+sv_merged %>%
+  filter(SV_type == "DUP") %>%
+  arrange(ID) %>%
+  dplyr::select(ID) %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_type)) %>%
+  filter(read_type == "alt") %>%
+  pull(read_id) %>%
+  unique(.)%>%
+  write_lines(paste0(sample_folder, "/dup_read_name.tsv"))
+
+

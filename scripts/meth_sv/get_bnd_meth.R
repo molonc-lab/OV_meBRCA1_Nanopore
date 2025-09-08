@@ -77,7 +77,7 @@ BND_supporting_reads[, ref_position := deduce_reference_position(cigar, ref_star
 BND_supporting_reads <-BND_supporting_reads %>%
   left_join(BND %>%
               left_join(read_mapping%>%
-                          dplyr::select(ID, read_id, read_alt_pos, read_type) %>%
+                          dplyr::select(ID, read_id,  read_type) %>%
                           distinct(), relationship = "many-to-many")%>%
             filter(read_type == "alt") , by = join_by(read_id == read_id, chrom ==chr_start), relationship = "many-to-many") %>%
   filter(SV_start >= ref_start, ref_end >= SV_start) %>%
@@ -89,7 +89,7 @@ BND_ref_reads  <- modkit_extract %>%
   distinct() %>%
   right_join(BND %>%
                left_join(read_mapping%>%
-                           dplyr::select(ID, read_id, read_alt_pos, read_type) %>%
+                           dplyr::select(ID, read_id, read_type) %>%
                            distinct()) %>%
                filter(read_type == "ref"), by = join_by(read_id == read_id, chrom ==chr_start)) 
 

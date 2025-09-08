@@ -262,7 +262,7 @@ isogenic_overlap_svs <-function(h453_reads, a630_reads, type){
     distinct() %>%
     inner_join(overlapped_reads_pileup %>%
                  filter(read_type == "ref")) %>%
-    drop_na() %>%
+    filter(!is.na(ref_position)) %>%
     filter(abs(p_meth_perc - meth_perc)<=0.2) %>%
     dplyr::select(ref_position, chrom, Sample, p_meth_perc, ID, SV_start, SV_end, SV_len) %>%
     distinct() %>%
@@ -275,11 +275,11 @@ isogenic_overlap_svs <-function(h453_reads, a630_reads, type){
     group_by(SV_len, ID, ref_position) %>%
     filter(n_distinct(read_type)==2) %>%
     ungroup() %>%
-    drop_na() %>%
+    filter(!is.na(ref_position)) %>%
     pivot_wider(values_from = meth_perc, names_from = Sample) %>%
     mutate(read_type = if_else(read_type == "ref", "REF", "ALT"),
            read_type = factor(read_type, levels = c("REF", "ALT"))) %>%
-    drop_na() 
+    filter(!is.na(`OVCAR8 LP A6-30`) & !is.na(`OVCAR8 LP H4-53`))
   } else{
     overlapped_reads_pileup_filt <- overlapped_reads_pileup %>%
       filter(read_type == "parent", (meth_perc >=0.8| meth_perc <= 0.2) ) %>%
@@ -287,13 +287,12 @@ isogenic_overlap_svs <-function(h453_reads, a630_reads, type){
       distinct() %>%
       inner_join(overlapped_reads_pileup %>%
                    filter(read_type == "ref")) %>%
-      drop_na() %>%
-      filter(abs(p_meth_perc - meth_perc)<=0.2) %>%
+      filter(!is.na(meth_perc), abs(p_meth_perc - meth_perc)<=0.2) %>%
       dplyr::select(ref_position, chrom, Sample, p_meth_perc, ID, SV_start, SV_end, SV_len) %>%
       distinct() %>%
       inner_join(overlapped_reads_pileup %>%
                    filter(read_type != "parent")) %>%
-      mutate(relat_pos = case_when(ef_position <= SV_start ~ ref_position -SV_start,
+      mutate(relat_pos = case_when(ref_position <= SV_start ~ ref_position -SV_start,
                                    ref_position > SV_start &ref_position < SV_end ~ (ref_position-SV_start)/SV_len *500,
                                    ref_position >= SV_end ~ ref_position -SV_end +500,
                                    TRUE ~NA))    %>%
@@ -334,10 +333,10 @@ isogenic_overlap_svs_venn <- function(h453_reads, a630_reads ,type, output_file_
                                 !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
                                 !is.na(ID_a630) ~ paste0(ID_a630, "_a630"))) 
   
-  venn.diagram(list("OVCAR8 LP A6-30" =  overlapped_reads %>%
+  venn.diagram(list("OVCAR8 A6-meth" =  overlapped_reads %>%
                       filter(!is.na(ID_a630)) %>%
                       pull(commonID),
-                    "OVCAR8 LP H4-53" =   overlapped_reads%>%
+                    "OVCAR8 H4-KO" =   overlapped_reads%>%
                       filter(!is.na(ID_h453)) %>%
                       pull(commonID))
                ,fill = c("#007e5d", "#f8c828"),
@@ -361,10 +360,10 @@ isogenic_overlap_indels_venn <- function(h453_reads, a630_reads ,type, output_fi
                                 !is.na(ID_h453) ~ paste0(ID_h453, "_h453"),
                                 !is.na(ID_a630) ~ paste0(ID_a630, "_a630"))) 
   
-  venn.diagram(list("OVCAR8 LP A6-30" =  overlapped_reads %>%
+  venn.diagram(list("OVCAR8 A6-meth" =  overlapped_reads %>%
                       filter(!is.na(ID_a630)) %>%
                       pull(commonID),
-                    "OVCAR8 LP H4-53" =   overlapped_reads%>%
+                    "OVCAR8 H4-KO" =   overlapped_reads%>%
                       filter(!is.na(ID_h453)) %>%
                       pull(commonID))
                ,fill = c("#007e5d", "#f8c828"),
@@ -551,3 +550,59 @@ match_clair3_meth <- function(T_read_mapping_RDS, T_modkit_extract, N_modkit_ext
   return(total_reads)
 }
 
+
+create_windows <- function(ID, chrom, SV_start, SV_end, SV_type) {
+  # Left-side windows
+  left_starts <- seq(from = SV_start - num_windows * window_size, 
+                     to = SV_start - window_size, 
+                     by = window_size)
+  left_ends <- left_starts + window_size - 1
+  
+  left_starts[left_starts <= 0] <- NA
+  left_ends[left_starts <= 0] <- NA
+  
+  # Right-side windows
+  right_starts <- seq(from = SV_end + 1, 
+                      to = SV_end + num_windows * window_size, 
+                      by = window_size)
+  right_ends <- right_starts + window_size - 1
+  
+  # Combine and return as data.frame
+  data.frame(
+    variant_id = ID,
+    chrom = chrom,
+    SV_start = SV_start,
+    SV_end = SV_end,
+    SV_type = SV_type,
+    window_start = c(left_starts, right_starts),
+    window_end = c(left_ends, right_ends)
+  )
+}
+
+keep_bigger_overlaps <- function(gr1, gr2) {
+  # Find overlaps between gr1 and gr2
+  hits <- findOverlaps(gr1, gr2)
+  
+  # Extract indices of overlapping ranges
+  gr1_idx <- queryHits(hits)
+  gr2_idx <- subjectHits(hits)
+  
+  # Get widths of overlapping ranges
+  gr1_widths <- width(gr1[gr1_idx])
+  gr2_widths <- width(gr2[gr2_idx])
+  
+  # Decide which ranges to keep
+  keep_gr1 <- gr1_idx[gr1_widths >= gr2_widths]  # keep gr1 if width equal or larger
+  keep_gr2 <- gr2_idx[gr2_widths > gr1_widths]   # keep gr2 if strictly larger
+  
+  # Unique indices
+  keep_gr1 <- unique(keep_gr1)
+  keep_gr2 <- unique(keep_gr2)
+  
+  # Subset GRanges
+  gr1_keep <- gr1[keep_gr1]
+  gr2_keep <- gr2[keep_gr2]
+  
+  # Combine and return
+  c(gr1_keep, gr2_keep)
+}

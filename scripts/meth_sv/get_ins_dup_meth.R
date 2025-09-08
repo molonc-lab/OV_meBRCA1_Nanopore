@@ -26,6 +26,8 @@ modkit_extract <- fread(paste0(sample_folder, "/", SampleID, "_merged_SV_modkit_
   filter(mod_code == "m") %>%
   dplyr::select(read_id, forward_read_position, ref_position,chrom, mod_strand, ref_strand, read_length, mod_qual, base_qual)
 
+
+#INSERTION
 ins_primary_mapping <- fread(paste0(sample_folder,"/ins_read_name_primary_map.tsv"), col.names = c("read_id",  "flag", "rname", "pos", "cigar")) %>%
   mutate(strand = if_else(flag %in% c(16, 2064), "-", "+")) %>%
   rowwise() %>%
@@ -54,11 +56,11 @@ ins_shift = setDT(ins_supporting_reads %>%
 ins_shift[, shift_position := deduce_ref_pos_ins_shift(cigar, ref_start, forward_read_position, ref_strand, SV_start)]
 
 INS <- sv_merged %>%
-  filter(str_detect(ALT, "INS"))
+  filter(SV_type == "INS")
 
 INS_reads <- INS %>%
   left_join(read_mapping%>%
-              dplyr::select(ID, read_id, read_alt_pos, read_strand, read_type)) %>%
+              dplyr::select(ID, read_id, read_type)) %>%
   left_join(modkit_extract)
 
 merged_INS_reads <- INS_reads %>%
@@ -70,3 +72,50 @@ merged_INS_reads <- INS_reads %>%
          shift_position = if_else(ref_position == -1 & ref_strand == "-", shift_position +SV_len, shift_position  ))
 
 saveRDS(merged_INS_reads, file = paste0(sample_folder, "/", SampleID, "_INS_meth.RDS"))
+
+#DUPLICATION
+
+dup_primary_mapping <- fread(paste0(sample_folder,"/dup_read_name_primary_map.tsv"), col.names = c("read_id",  "flag", "rname", "pos", "cigar")) %>%
+  mutate(strand = if_else(flag %in% c(16, 2064), "-", "+")) %>%
+  rowwise() %>%
+  mutate(poses = process_cigar_positions(strand, as.numeric(pos), cigar)) %>%
+  separate(poses, into = c("ref_start", "ref_end", "read_start", "read_end")) %>%
+  mutate(ref_start = as.numeric(ref_start), ref_end = as.numeric(ref_end),
+         read_start = as.numeric(read_start), read_end = as.numeric(read_end)) %>%
+  dplyr::select(-pos, -flag)
+
+dup_supporting_reads <- dup_primary_mapping %>%
+  left_join(modkit_extract %>%
+              dplyr::select(read_id, forward_read_position, read_length, mod_qual, base_qual, ref_position) %>%
+              distinct(),
+            by =join_by(read_id == read_id, read_start <= forward_read_position, read_end >= forward_read_position)) %>%
+  dplyr::rename(chrom = rname, ref_strand = strand) %>%
+  filter(!is.na(forward_read_position) ) %>%
+  mutate(ref_start = if_else(ref_strand == "-", ref_end, ref_start)) %>%
+  left_join(read_mapping %>%
+              dplyr::select(read_id, ID) %>%
+              left_join(sv_merged %>%
+                          dplyr::select(ID, SV_start)) %>%
+              distinct()) 
+
+dup_shift = setDT(dup_supporting_reads %>%
+                    filter(ref_position== -1))
+dup_shift[, shift_position := deduce_ref_pos_ins_shift(cigar, ref_start, forward_read_position, ref_strand, SV_start)]
+
+DUP <- sv_merged %>%
+  filter(SV_type == "DUP")
+
+DUP_reads <- DUP %>%
+  left_join(read_mapping%>%
+              dplyr::select(ID, read_id, read_type)) %>%
+  left_join(modkit_extract)
+
+merged_DUP_reads <- DUP_reads %>%
+  left_join(dup_shift %>%
+              dplyr::select(read_id, forward_read_position, ID, shift_position)) %>%
+  mutate(shift_position = case_when(ref_position != -1 & ref_position <= SV_start ~ ref_position,
+                                    ref_position != -1 & ref_position > SV_start ~ ref_position+ SV_len,
+                                    T ~ shift_position),
+         shift_position = if_else(ref_position == -1 & ref_strand == "-", shift_position +SV_len, shift_position  ))
+
+saveRDS(merged_DUP_reads, file = paste0(sample_folder, "/", SampleID, "_DUP_meth.RDS"))

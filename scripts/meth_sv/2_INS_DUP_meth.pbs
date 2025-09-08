@@ -10,11 +10,13 @@ module load samtools/1.20
 module load R/4.3.1
 
 sample_dir="${wk_dir}/output/${SampleID}"
-Rscript ${wk_dir}/scripts/meth_sv/get_ins_readid.R ${wk_dir} ${SampleID}
+Rscript ${wk_dir}/scripts/meth_sv/get_ins_dup_readid.R ${wk_dir} ${SampleID}
 
 #get alt seq cigar
 samtools view -N ${sample_dir}/ins_read_name.tsv \
 ${sample_dir}/${SampleID}_merged_sv.bam|cut -f 1,2,3,4,6 > ${sample_dir}/ins_read_name_primary_map.tsv 
+samtools view -N ${sample_dir}/dup_read_name.tsv \
+${sample_dir}/${SampleID}_merged_sv.bam|cut -f 1,2,3,4,6 > ${sample_dir}/dup_read_name_primary_map.tsv 
 
 #extract BND meth for both ref and alt 
-Rscript ${wk_dir}/scripts/meth_sv/get_ins_meth.R ${wk_dir} ${SampleID}
+Rscript ${wk_dir}/scripts/meth_sv/get_ins_dup_meth.R ${wk_dir} ${SampleID}

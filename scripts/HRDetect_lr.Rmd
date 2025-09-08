@@ -462,7 +462,6 @@ subtypes.vec<-c("deletion:clustered:1kb-10kb","deletion:clustered:10kb-100kb","d
             mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+")))
   RE <- SV %>%
   group_by(SampleID) %>%
-    summarise(n=n())
   group_map(~process.file(.x, .y$SampleID), .keep = T)
   
   allcounts.df <- allcounts.df %>%
@@ -474,9 +473,7 @@ subtypes.vec<-c("deletion:clustered:1kb-10kb","deletion:clustered:10kb-100kb","d
   
   allcounts.df[is.na(allcounts.df)]=0
   
-
-
-
+  
 sv_total_counts <- allcounts.df%>%
   dplyr::select(-Type,-SubType) %>%
   gather(key = SampleID, value = "N") %>%

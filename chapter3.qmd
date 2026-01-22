@@ -2297,4 +2297,20 @@ data.frame(log_tpm[c("ENSG00000188554" ),]) %>%
 
 gene_list%>%
   filter(`Associated Gene Name` == "NBR1")
+
+
+
+data.frame(log_tpm[c("ENSG00000189052" ),]) %>%
+  `colnames<-`(c("log_tpm")) %>%
+  rownames_to_column("sample") %>%
+  mutate(sample_simp = gsub("_[0-9]*$", "", sample)) %>%
+  mutate(meBRCA1 = if_else(sample_simp =="OVCAR8_LPA6_30", "Hom", "Het"))%>%
+  ggplot(aes(y = log_tpm, x =meBRCA1, color = meBRCA1, label = sample_simp))+
+  geom_point()+
+  geom_text_repel(nudge_x = 0.4,segment.color = 'grey50')+
+  scale_colour_manual(values = sample_palette)+
+  theme_bw()+
+  theme(axis.title.x = element_blank(),
+        legend.position = "none")+
+  ylab("NBR1 Expression (log(TPM))")
 ```

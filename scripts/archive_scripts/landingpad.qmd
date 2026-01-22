@@ -1,0 +1,37 @@
+---
+title: "ovcar8_a630_bp"
+format: html
+editor: visual
+---
+
+
+```{r}
+library("data.table")
+library("ggplot2")
+library("tidyverse")
+library("Rsamtools")
+```
+
+```{r}
+param <-ScanBamParam(which=GRanges(c("chr17:43042960-43170350")), what = c("rname", "strand", "pos", "qwidth", "seq", "cigar"))
+temp_ins <- scanBam("output/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_mapped.bam", param = param)
+data.frame(temp_ins) %>%
+  mutate(n_nuc = nchar(chr17.43042960.43170350.seq))
+```
+
+```{r}
+a630_mosdepth <- fread("output/OVCAR8_LP_A6_30/OVCAR8_LP_A6_30_chr17.regions.bed.gz", col.names = c("chrom", "start", "end", "a630_depth"))
+ovcar8_p_mosdepth <- fread("output/OVCAR8/OVCAR8_chr17.regions.bed.gz", col.names = c("chrom", "start", "end", "p_depth"))
+a630_mosdepth %>%
+  filter(start >= 43031000, end <= 43175000) %>%
+  left_join(ovcar8_p_mosdepth %>%
+  filter(start >= 43031000, end <= 43175000))  %>%
+  mutate(a630_depth = round(a630_depth /mean(a630_depth),1)+0.5) %>%
+  ggplot(aes(x = start, y =a630_depth))+
+  geom_line()+
+  theme_bw()+
+  geom_segment(aes(x = 43042951, xend = 43170371, y = 0, yend = 0), color = "red")+
+  geom_segment(aes(x = 43042952, xend = 43125519, y = 0.25, yend =0.25), color = "orange")+
+  geom_segment(aes(x = 43126662, xend = 43042970, y = 0.5, yend = 0.5), color = "green")
+```
+

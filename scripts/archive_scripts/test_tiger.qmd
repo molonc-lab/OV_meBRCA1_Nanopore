@@ -1,0 +1,600 @@
+---
+title: "tiger_adapt"
+format: html
+editor: visual
+---
+
+```{r}
+library("Biostrings")
+library("ShortRead")
+library("Rsamtools")
+library("GenomicRanges")
+library("IRanges")
+library("GenomicAlignments")
+library("rtracklayer")
+library("BiocParallel")
+library("DNAcopy")
+library("data.table")
+```
+
+```{r}
+genome_build <- "hg38"
+read_length  <- 7000
+TIGER_folder <- "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/TIGER"    # base folder where sequence/gap files live
+out_dir      <- file.path(TIGER_folder, "Alignability_and_GC_filters",
+                           paste0(genome_build, "_", read_length, "bp"))
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+
+ref_fasta <- file.path("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa")
+gap_file  <- file.path("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/hg38_gap.bed")
+```
+
+#helper
+
+```{r}
+# ---------------- Helper utilities ----------------
+chrnum <- function(idx, genome_build = "hg38"){
+  if (genome_build %in% c("hg19","hg38")) {
+    names <- c(as.character(1:22), "X", "Y")
+  } else if (genome_build == "mm10") {
+    names <- c(as.character(1:19), "X", "Y", "M")
+  } else if (genome_build == "dm6") {
+    names <- c("2L","2R","3L","3R","4","X","Y")
+  } else stop("Unsupported genome_build")
+  return(names[idx])
+}
+
+TIGER_last_autosome <- function(genome_build){
+  if (genome_build == "mm10") return(19)
+  if (genome_build == "dm6") return(5)
+  return(22)
+}
+
+```
+
+#step2 #---------------- Part 2: Import samtools-filtered start positions and produce Coordinates_to_remove ----------
+
+```{r}
+# Accept either per_chr_start_files (named list) OR a single file with two columns: chr pos
+build_coordinates_to_remove <- function(chr_length,
+                                        per_chr_start_files = NULL,
+                                        single_positions_file = NULL,
+                                        out_file = NULL,
+                                        chr_col = 1, pos_col = 2,
+                                        header = FALSE){
+  # chr_length: named integer vector or named list with chromosome lengths, names = chromosome names
+ 
+  # single_positions_file: single file path with two columns (chr,pos) for all chromosomes (new behaviour)
+  # header: whether single_positions_file has header
+  
+  # prepare empty coordinates_to_remove list
+  Coordinates_to_remove <- vector("list", length(chr_length))
+  names(Coordinates_to_remove) <- names(chr_length)
+  
+  if (!is.null(single_positions_file)){
+    if (!file.exists(single_positions_file)) stop("single_positions_file not found: ", single_positions_file)
+    # read two-column file (flexible delim)
+    # faster approach: read.table; for large files consider data.table::fread()
+    df <- read.table(single_positions_file, header = header, stringsAsFactors = FALSE)
+    if (ncol(df) < 2) stop("single_positions_file must have at least two columns: chr and pos")
+    chr_vals <- as.character(df[[chr_col]])
+    pos_vals <- as.integer(df[[pos_col]])
+    # group by chromosome into a named list of integer vectors of kept positions
+    positions_by_chr <- split(pos_vals, chr_vals)
+    # For each chromosome fill Coordinates_to_remove as setdiff(allpos, mapped_positions)
+    for (chr in names(chr_length)){
+      L <- as.integer(chr_length[[chr]])
+      if (is.na(L) || L <= 0){
+        warning("Invalid length for chromosome: ", chr); Coordinates_to_remove[[chr]] <- integer(0); next
+      }
+      mapped_pos <- integer(0)
+      # try to match chromosome keys robustly: exact match, or without 'chr' prefix
+      if (!is.null(positions_by_chr[[chr]])) mapped_pos <- positions_by_chr[[chr]]
+      chr_no_chr <- sub("^chr", "", chr, ignore.case = TRUE)
+      if (length(mapped_pos) == 0 && !is.null(positions_by_chr[[chr_no_chr]])) mapped_pos <- positions_by_chr[[chr_no_chr]]
+      if (length(mapped_pos) == 0){
+        Coordinates_to_remove[[chr]] <- seq_len(L)  # if none mapped, everything removed
+        message("Chr ", chr, ": no mapped starts found in single file; mark all positions to remove")
+        next
+      }
+      # sanitize mapped_pos: keep integers in 1..L
+      mapped_pos <- unique(mapped_pos[!is.na(mapped_pos) & mapped_pos >= 1 & mapped_pos <= L])
+      if (length(mapped_pos) == 0) {
+        Coordinates_to_remove[[chr]] <- seq_len(L)
+        message("Chr ", chr, ": after sanitization no mapped starts; mark all positions to remove")
+        next
+      }
+      # coordinates to remove = setdiff(all positions, mapped_positions)
+      coords_to_remove <- setdiff(seq_len(L), mapped_pos)
+      Coordinates_to_remove[[chr]] <- coords_to_remove
+      message("Chr ", chr, ": keep ", length(mapped_pos), " mapped starts; remove ", length(coords_to_remove))
+    }
+  } 
+  
+  if (!is.null(out_file)){
+    saveRDS(Coordinates_to_remove, out_file)
+    message("Saved coordinates_to_remove to ", out_file)
+  }
+  return(Coordinates_to_remove)
+}
+
+
+```
+
+#step 3 \## ---------------- Part 3: Define read-number windows from alignability filter coordinates --------------
+
+```{r}
+genome_fa <- "ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+ont_bed   <- "TIGER/ont_mappability.bed"
+
+win_size  <- 10000
+cov_thr   <- 2        # ONT mappability threshold
+out_file  <- "ONT_TIGER_windows_GC.RData"
+
+# =============================
+# FUNCTIONS
+# =============================
+
+calc_gc_401 <- function(seq_chr) {
+  s <- toupper(as.character(seq_chr))
+  x <- strsplit(s, "", fixed = TRUE)[[1]]
+
+  is_gc <- as.integer(x == "G" | x == "C")
+  is_n  <- as.integer(x == "N")
+
+  k <- rep.int(1L, 401)
+  k[201] <- 0L
+
+  gc_sum <- stats::filter(is_gc, k, sides = 2)
+  n_sum  <- stats::filter(is_n,  k, sides = 2)
+
+  gc_frac <- rep(NA_real_, length(is_gc))
+  ok <- !is.na(gc_sum) & n_sum == 0
+  gc_frac[ok] <- gc_sum[ok] / 400
+
+  gc_frac
+}
+
+bin_gc <- function(gc_frac) {
+  b <- floor(gc_frac * 400) + 1L
+  b[b < 1 | b > 401] <- NA
+  b
+}
+
+make_windows <- function(L, low_pos, win_size) {
+  keep <- rep.int(TRUE, L)
+  keep[low_pos] <- FALSE
+
+  idx <- which(keep)
+  nwin <- floor(length(idx) / win_size)
+
+  list(
+    starts = idx[seq.int(1, nwin * win_size, by = win_size)],
+    ends   = idx[seq.int(win_size, nwin * win_size, by = win_size)]
+  )
+}
+
+count_gc_bins <- function(gc_bins, win_starts, win_ends) {
+  pos <- which(!is.na(gc_bins))
+  w <- findInterval(pos, win_starts)
+  ok <- w > 0 & pos <= win_ends[w]
+
+  tab <- table(w[ok], gc_bins[pos[ok]])
+
+  out <- matrix(0L, length(win_starts), 401)
+  out[as.integer(rownames(tab)), as.integer(colnames(tab))] <- tab
+  out
+}
+
+# =============================
+# LOAD INPUTS
+# =============================
+
+message("Loading ONT mappability BED...")
+mapp <- fread(ont_bed, col.names = c("chr", "start", "end", "cov"))
+mapp[, start := start + 1]
+mapp[, chr := sub("\\s+.*$", "", chr)]
+low_map <- mapp[cov < cov_thr]
+
+message("Loading reference genome...")
+fasta <- readDNAStringSet(genome_fa)
+names(fasta) <- sub("\\s+.*$", "", names(fasta))
+
+# intersect chromosomes
+chroms <- intersect(names(fasta), unique(low_map$chr))
+message("Processing chromosomes: ", paste(chroms, collapse = ", "))
+
+# =============================
+# MAIN LOOP
+# =============================
+
+Wins <- list()
+Reads_expected_nominal <- list()
+
+for (chr in chroms) {
+  message("Processing ", chr)
+
+  seq_chr <- fasta[[chr]]
+  L <- length(seq_chr)
+
+  low_pos <- unlist(
+    Map(seq,
+        low_map[chr == chr]$start,
+        low_map[chr == chr]$end),
+    use.names = FALSE
+  )
+  low_pos <- low_pos[low_pos >= 1 & low_pos <= L]
+
+  wins <- make_windows(L, low_pos, win_size)
+
+  Wins[[chr]] <- data.frame(
+    chr = chr,
+    start = wins$starts,
+    end = wins$ends,
+    center = round((wins$starts + wins$ends) / 2)
+  )
+
+  gc_frac <- calc_gc_401(seq_chr)
+  gc_frac[low_pos] <- NA
+
+  gc_bins <- bin_gc(gc_frac)
+
+  Reads_expected_nominal[[chr]] <-
+    count_gc_bins(gc_bins, wins$starts, wins$ends)
+
+  gc()
+}
+
+
+# -----------------------------
+# Save results
+# -----------------------------
+save(Wins, Reads_expected_nominal, file="ONT_TIGER_windows_GC.RData")
+```
+
+# step 4 ---------------- Part 4: Compute GC content in 401 bp windows and binning -------------------------
+
+```{r}
+# Dependencies:
+# BiocManager::install(c("Rsamtools","Biostrings"))
+# install.packages("data.table")
+library(Rsamtools)
+library(Biostrings)
+library(data.table)
+library(GenomicRanges)
+library(IRanges)
+
+compute_GC_bins_401_streamed <- function(ref_fasta,
+                                         out_dir = ".",
+                                         chunk_bp = 1e6,
+                                         nbins = 401,
+                                         exclude_center = TRUE,
+                                         tmp_subdir = "gc_tmp",
+                                         Coordinates_to_remove = NULL,
+                                         flush_every = 5000,
+                                         suppress_depr_warning = FALSE){
+  # Memory-efficient GC-bin builder that EXCLUDES coordinates in Coordinates_to_remove.
+  # If you cannot update Bioconductor, set suppress_depr_warning=TRUE to hide the internal deprecation warning.
+  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+  tmpdir <- file.path(out_dir, tmp_subdir); dir.create(tmpdir, showWarnings = FALSE, recursive = TRUE)
+
+  fai <- FaFile(ref_fasta)
+  open.FaFile(fai)
+  # Optionally suppress internal deprecation warnings from S4Vectors while calling seqinfo()
+  if (suppress_depr_warning) {
+    seqinfo_all <- suppressWarnings(seqinfo(fai))
+  } else {
+    seqinfo_all <- seqinfo(fai)
+  }
+
+  seqnames_full <- names(seqinfo_all)
+  # Short name cleaning: keep first token and ensure 'chr' prefix
+  seqnames_short <- sub("\\s+.*$", "", seqnames_full)
+  seqnames_short <- ifelse(grepl("^chr", seqnames_short, ignore.case = TRUE),
+                           sub("^(?i)chr", "chr", seqnames_short, perl = TRUE),
+                           paste0("chr", seqnames_short))
+  names(seqinfo_all) <- seqnames_short
+  seqnames_ref_all <- names(seqinfo_all)
+  seqlens <- seqlengths(seqinfo_all)
+
+  # normalize Coordinates_to_remove keys if provided
+  if (!is.null(Coordinates_to_remove)){
+    if (!is.list(Coordinates_to_remove)) stop("Coordinates_to_remove must be a list named by chromosome.")
+    norm_names <- function(x){
+      x <- sub("\\s+.*$", "", x)
+      ifelse(grepl("^chr", x, ignore.case = TRUE), sub("^(?i)chr", "chr", x, perl = TRUE), paste0("chr", x))
+    }
+    names(Coordinates_to_remove) <- norm_names(names(Coordinates_to_remove))
+  }
+
+  window_radius <- 200L
+  window_len <- 2L * window_radius + 1L
+  denom <- if (exclude_center) window_len - 1L else window_len
+
+  map_to_bin <- function(frac){
+    # clamp, handle NA
+    frac_cl <- frac
+    frac_cl[is.na(frac_cl)] <- NA_real_
+    frac_cl[frac_cl < 0] <- 0
+    frac_cl[frac_cl > 1] <- 1
+    bidx <- round(frac_cl * (nbins - 1)) + 1L
+    bidx[is.na(frac_cl)] <- NA_integer_
+    # Ensure integer vector
+    return(as.integer(bidx))
+  }
+
+  # iterate chromosomes (cleaned names)
+  for (chr in seqnames_ref_all){
+    message("Processing ", chr)
+    L <- seqlens[[chr]]
+    if (is.na(L) || L <= window_len){ message("  too short or missing; skipping"); next }
+
+    # prepare per-bin temp files for this chr
+    chr_tmp_dir <- file.path(tmpdir, paste0("tmp_", gsub("[^A-Za-z0-9_-]", "_", chr)))
+    if (!dir.exists(chr_tmp_dir)) dir.create(chr_tmp_dir, recursive = TRUE, showWarnings = FALSE)
+    bin_paths <- file.path(chr_tmp_dir, paste0("bin_", seq_len(nbins), ".txt"))
+    # ensure no stale files
+    lapply(bin_paths, function(p) if (file.exists(p)) file.remove(p))
+
+    # prepare sorted removal vector for fast membership checks
+    removed_vec <- integer(0)
+    if (!is.null(Coordinates_to_remove) && !is.null(Coordinates_to_remove[[chr]])){
+      removed_vec <- sort(unique(as.integer(Coordinates_to_remove[[chr]])))
+      removed_vec <- removed_vec[!is.na(removed_vec) & removed_vec >= 1 & removed_vec <= L]
+    }
+
+    centers_min <- window_radius + 1L
+    centers_max <- L - window_radius
+    if (centers_min > centers_max) { message("  no valid centers, skipping"); next }
+    chunk_starts <- seq(centers_min, centers_max, by = as.integer(chunk_bp))
+
+    # in-memory buffers per bin (flush to disk periodically)
+    buffers <- vector("list", nbins)
+    buf_sizes <- integer(nbins)
+
+    # sanity checks
+    if (!is.list(buffers) || length(buffers) != nbins) stop("Internal error: buffers not of length nbins")
+    if (length(bin_paths) != nbins) stop("Internal error: bin_paths length mismatch nbins")
+
+    for (cstart in chunk_starts){
+      cend <- min(centers_max, cstart + as.integer(chunk_bp) - 1L)
+      fetch_start <- max(1L, cstart - window_radius)
+      fetch_end <- min(L, cend + window_radius)
+
+      # fetch sequence for the chunk
+      rng <- GRanges(seqnames = chr, ranges = IRanges(start = fetch_start, end = fetch_end))
+      seq_chunk <- scanFa(fai, rng)[[1]]
+      s <- as.character(seq_chunk)
+      chars <- strsplit(s, split = "")[[1]]
+      # fast numeric vectors
+      isGC <- as.integer(chars == "G" | chars == "C")
+      isN  <- as.integer(chars == "N" | chars == "n")
+      Gcum <- cumsum(isGC)
+      Ncum <- cumsum(isN)
+
+      centers <- seq(cstart, cend)
+      ncenters <- length(centers)
+      win_start <- centers - window_radius; win_end <- centers + window_radius
+      local_ws <- win_start - fetch_start + 1L; local_we <- win_end - fetch_start + 1L
+
+      # use cumulative sums to compute counts
+      leftG <- c(0L, Gcum); gc_counts <- Gcum[local_we] - leftG[local_ws]
+      leftN <- c(0L, Ncum); n_counts  <- Ncum[local_we] - leftN[local_ws]
+
+      if (exclude_center){
+        center_local_idx <- centers - fetch_start + 1L
+        center_isGC <- isGC[center_local_idx]
+        gc_exc <- gc_counts - center_isGC
+        nonN_exc <- (window_len - n_counts) - 1L
+        ok_idx <- which(nonN_exc == denom)
+        gc_frac <- rep(NA_real_, ncenters)
+        if (length(ok_idx) > 0) gc_frac[ok_idx] <- gc_exc[ok_idx] / denom
+      } else {
+        nonN_counts <- window_len - n_counts
+        ok_idx <- which(nonN_counts == denom)
+        gc_frac <- rep(NA_real_, ncenters)
+        if (length(ok_idx) > 0) gc_frac[ok_idx] <- gc_counts[ok_idx] / denom
+      }
+
+      # map to bins
+      bin_idx <- map_to_bin(gc_frac)
+      # TEMP diagnostic: put this right after bin_idx <- map_to_bin(gc_frac)
+bad_idx_all <- which(!is.na(bin_idx) & (bin_idx < 1 | bin_idx > nbins))
+if (length(bad_idx_all) > 0) {
+  dbg_file <- file.path(out_dir, "gc_bin_debug.log")
+  cat("=== BAD BIN INDICES DETECTED ===\n", file = dbg_file, append = TRUE)
+  cat("chr:", chr, "chunk:", cstart, "-", cend, "\n", file = dbg_file, append = TRUE)
+  cat("unique(bin_idx):", paste(unique(bin_idx, na.rm = TRUE), collapse = ","), "\n", file = dbg_file, append = TRUE)
+  cat("bad positions (first 20):\n", file = dbg_file, append = TRUE)
+  print_df <- data.frame(center = centers[bad_idx_all],
+                         gc_frac = gc_frac[bad_idx_all],
+                         bin_idx = bin_idx[bad_idx_all])[1:min(length(bad_idx_all),20), ]
+  write.table(print_df, file = dbg_file, append = TRUE, row.names = FALSE, col.names = TRUE)
+  stop("Bad bin indices detected — see ", dbg_file)
+}
+
+      valid_idx <- which(!is.na(bin_idx))
+      if (length(valid_idx) == 0) { 
+        # nothing to do this chunk
+        rm(seq_chunk, s, chars, isGC, isN, Gcum, Ncum, gc_counts, n_counts, gc_frac, bin_idx); gc(); next 
+      }
+
+      # exclude removed coordinates (fast findInterval)
+      if (length(removed_vec) > 0){
+        fi <- findInterval(centers[valid_idx], removed_vec)
+        present <- fi > 0 & removed_vec[fi] == centers[valid_idx]
+        keep_local_mask <- !present
+        if (!any(keep_local_mask)) {
+          rm(seq_chunk, s, chars, isGC, isN, Gcum, Ncum, gc_counts, n_counts, gc_frac, bin_idx); gc(); next
+        }
+        keep_idx <- valid_idx[keep_local_mask]
+      } else {
+        keep_idx <- valid_idx
+      }
+      
+      # --- SAFE APPEND & DIAGNOSTIC: replace existing append code with this ---
+# Assumes variables available: bin_idx, keep_idx, centers, buffers, buf_sizes, buf_paths, buf_sizes, flush_every, nbins, bin_paths, out_dir
+
+# file to log bad bins
+bad_log <- file.path(out_dir, "bad_bin_indices.log")
+
+if (length(keep_idx) > 0) {
+  # compute the bin numbers for kept indices
+  bins_kept <- bin_idx[keep_idx]
+
+  # ensure bins_kept is integer-like
+  if (!is.integer(bins_kept)) bins_kept <- as.integer(bins_kept)
+
+  # detect invalid bin indices
+  invalid_mask <- is.na(bins_kept) | bins_kept < 1L | bins_kept > nbins
+  if (any(invalid_mask)) {
+    # log detailed diagnostic about the first few invalid cases
+    bad_vals <- unique(bins_kept[invalid_mask])
+    msg <- paste0(Sys.time(), " - Warning: ", sum(invalid_mask), " invalid bin indices found. examples: ",
+                  paste(head(bad_vals, 10), collapse = ", "), 
+                  " (nbins=", nbins, ").\n")
+    cat(msg, file = bad_log, append = TRUE)
+    # optionally print to console for immediate feedback
+    message(msg)
+    # filter them out so we don't try to index buffers with them
+    keep_idx <- keep_idx[!invalid_mask]
+    bins_kept <- bins_kept[!invalid_mask]
+  }
+
+  if (length(keep_idx) > 0) {
+
+  bins_kept <- as.integer(bin_idx[keep_idx])
+
+  # STRICT validation
+  valid_mask <- !is.na(bins_kept) & bins_kept >= 1L & bins_kept <= nbins
+  if (!any(valid_mask)) next
+
+  bins_kept <- bins_kept[valid_mask]
+  keep_idx  <- keep_idx[valid_mask]
+
+  # iterate by index, not value
+  ub <- sort(unique(bins_kept))
+
+  for (i in seq_along(ub)) {
+    bi <- ub[[i]]  # guaranteed scalar integer
+
+    # FINAL defensive check
+    if (bi < 1L || bi > nbins) next
+
+    idxs_local <- keep_idx[bins_kept == bi]
+    if (length(idxs_local) == 0) next
+
+    vals <- centers[idxs_local]
+
+    buffers[[bi]] <- c(buffers[[bi]], vals)
+    buf_sizes[bi] <- length(buffers[[bi]])
+
+    if (buf_sizes[bi] >= flush_every) {
+      data.table::fwrite(
+        data.table::data.table(pos = buffers[[bi]]),
+        file = bin_paths[bi],
+        append = TRUE,
+        col.names = F
+      )
+      buffers[[bi]] <- integer(0)
+      buf_sizes[bi] <- 0L
+    }
+  }
+}
+}
+
+      # cleanup chunk-level variables and free memory
+      rm(seq_chunk, s, chars, isGC, isN, Gcum, Ncum, gc_counts, n_counts, gc_frac, bin_idx)
+      gc()
+    } # end chunk loop
+
+    # flush remaining buffers to disk
+   for (bi in seq_len(nbins)){
+  if (length(buffers[[bi]]) > 0){
+    data.table::fwrite(
+      data.table::data.table(pos = buffers[[bi]]),
+      file = bin_paths[bi],
+      append = TRUE,
+      col.names = F
+    )
+    buffers[[bi]] <- integer(0)  # ✅ SAFE
+    buf_sizes[bi] <- 0L
+  }
+}
+
+
+    # assemble final bin list (read per-bin files)
+    bin_list <- vector("list", nbins)
+    for (bi in seq_len(nbins)){
+      p <- bin_paths[bi]
+      if (file.exists(p)){
+        v <- scan(p, what = integer(), quiet = TRUE)
+        bin_list[[bi]] <- if (length(v) == 0) integer(0) else v
+        file.remove(p)
+      } else {
+        bin_list[[bi]] <- integer(0)
+      }
+    }
+    unlink(chr_tmp_dir, recursive = TRUE, force = TRUE)
+    safe_chr <- gsub("[^A-Za-z0-9_\\-]", "_", chr)
+    out_path <- file.path(out_dir, paste0("GC_cont_401_bins_chr", safe_chr, ".rds"))
+    saveRDS(bin_list, out_path)
+    message("  saved ", out_path)
+    # keep memory low by not storing bin_list beyond this point
+    rm(bin_list); gc()
+  } # end chromosome loop
+
+  close.FaFile(fai)
+  message("Done. GC bins written to: ", normalizePath(out_dir))
+  invisible(NULL)
+}
+```
+
+#run
+
+```{r}
+# --------------- Example usage / workflow ---------------
+# 1) Generate FASTQ files
+# gap_df should be read from a UCSC gap file converted to data.frame with columns chr,start,end (1-based)
+gap_df <- read.table(gap_file, header = TRUE, stringsAsFactors = FALSE)[,1:3]; colnames(gap_df) <- c("chr","start","end")
+#generate_fastq_from_genome(ref_fasta, gap_df, read_length, out_dir)
+
+# 2) Run BWA/Samtools externally (print example commands)
+#samtools view -F 4 -F 16 -F 1024 -q 1 <bam file>  | cut -f 4 <file_name.txt>
+# print_bwa_samtools_commands(out_dir, read_length, genome_build, bwa_index_prefix = "/path/to/ref.fa")
+
+# 3) After aligning and extracting start positions per chromosome to files, run:
+chr_length <- fread("ref/hg19_len.txt")
+chr_len_vec = chr_length$`length(bp)`
+names(chr_len_vec) <- chr_length$chr
+Coordinates_to_remove <- build_coordinates_to_remove(chr_length =chr_len_vec,
+                                        single_positions_file = "TIGER/mappability_mask_simulate_chromosome_reads.txt",
+                                        chr_col = 1, pos_col = 2,
+                                        header = FALSE, out_file = file.path(out_dir, "Coordinates_to_remove.rds"))
+
+
+Coordinates_to_remove <-readRDS(file.path(out_dir, "Coordinates_to_remove.rds"))
+# 4) Create windows from alignability
+Wins <- make_windows_from_alignability(Coordinates_to_remove, chr_len_vec, win_size = 100, gap_df = gap_df)
+saveRDS(Wins, file.path(out_dir, paste0(genome_build, "_", read_length, "bp_wins_10000.rds")))
+Wins <- readRDS(file.path(out_dir, paste0(genome_build, "_", read_length, "bp_wins_10000.rds")))
+# 5) Compute GC bins (expensive; saves per-chromosome files)
+GC_cont_win_chr_bins <- compute_GC_bins_401_streamed(ref_fasta = ref_fasta, Coordinates_to_remove = Coordinates_to_remove, out_dir = out_dir)
+
+# 6) Compute Reads_expected_nominal
+# Reads_expected_nominal <- compute_Reads_expected_nominal(Wins, GC_cont_win_chr_bins)
+
+# 7) Import reads per sample (after you ran samtools per sample into folders)
+# per_sample_folders <- c("/path/sam_sample1", "/path/sam_sample2")
+# import_res <- import_reads_and_count_windows(per_sample_folders, Wins, Coordinates_to_remove, genome_build)
+# Windowed_data <- import_res$Windowed_data
+# Reads <- import_res$Reads
+
+# 8) GC-normalize and segmentation (implement GC normalization function fully as needed)
+# Windowed_data_norm <- gc_normalize_windows(Windowed_data, Reads, Reads_expected_nominal, GC_cont_win_chr_bins, params=list(...))
+# seg_res <- segment_and_filter(Windowed_data_norm, params=list(...))
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).

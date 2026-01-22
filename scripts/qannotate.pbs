@@ -1,0 +1,30 @@
+#PBS -r n
+#PBS -l mem=10GB,walltime=1:00:00,ncpus=2
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load adamajava/current
+qannotate="java -Xmx20G -jar /software/adamajava/adamajava-release/latest-stable/build/lib/qannotate-2.1.2.jar"
+
+input=${wk_dir}/output/${SampleID}/clairs_to/all_variants.vcf
+output=${wk_dir}/output/${SampleID}/clairs_to/${SampleID}
+
+$qannotate --mode dbsnp -d /mnt/lustre/reference/dbsnp/150_hg38/All_20170710.vcf -i $input -o $output.dbsnp --log $output.dbsnp.log
+$qannotate --mode trf -d /reference/genomeinfo/qannotate/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa.2.7.7.80.10.20.10.bed -i $output.dbsnp -o $output.trf --buffer 5 --log $output.trf.log;
+$qannotate --mode hom -d /mnt/lustre/reference/genomes/GRCh38_no_alt_analysis_set/indexes/GATK_3.3-0/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa -i $output.trf -o $output.hom --log $output.hom.log
+$qannotate --mode indelConfidence -d /mnt/lustre/reference/genomeinfo/qannotate/indel_GRCh38_modified_with_alts.repeat.mask -i $output.hom -o $output.conf --buffer 5 --log $output.conf.log
+$qannotate --mode snpeff -d /mnt/lustre/reference/software/snpEff/GRCh38.76/ -i $output.conf -o $output --log $output.snpeff.log
+awk '
+  /^##/ { print; next }
+  !done {
+    print "##qControlSample=SAMPLE"
+    print "##qTestSample=SAMPLE_2"
+    done=1
+  }
+  { print }' $output > $output.update
+$qannotate  --mode vcf2maf -i $output.update -o $output.qanno.maf --log $output.qanno.maf.log
+
+sufix=(dbsnp trf hom conf snpeff)
+for i in ${sufix[@]}; do j=$output.$i.log; if grep -q "ExitStatus 0" $j ; then f="${j%.log}"; rm $f; fi; done

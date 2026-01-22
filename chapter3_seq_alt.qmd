@@ -1549,6 +1549,207 @@ ggsave("plots/BND_change_indv.pdf", width = 16, height = 14)
 
 ```
 
+## isogenic SNV extraction
+
+```{r collapse = T}
+
+# #ovcar8
+isogenic_snv_ovcar8 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8/clairs_to/snv.vcf.gz", skip = '#CHROM', fill=TRUE) %>%
+  filter(FILTER == "PASS")
+
+isogenic_snv_ovcar8s <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/OVCAR8_LP_*/clairs_to/snv.vcf.gz") %>%
+  map_dfr(~ fread(.x, skip = '#CHROM', fill=TRUE)%>%
+            filter(FILTER == "PASS") %>%
+            separate(starts_with("OVCAR8"), into =c("GT", "GQ", "DP", "AF", "AD"), sep = ":",extra =  "drop") %>%
+            mutate(AF = as.numeric(AF)) %>%
+            filter(AF >= 0.2) %>%
+            dplyr::select(-c( "GQ", "DP"))%>%
+            mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+"))) %>%
+  left_join(isogenic_snv_ovcar8 %>%
+              dplyr::select(`#CHROM`, POS, REF, ALT) %>%
+              mutate(flag = "Parental"))  %>%
+  filter(is.na(flag),GT == "0/1", 
+         `#CHROM` %in% paste0("chr", seq(1, 22))) %>%
+  mutate(ID = paste0(`#CHROM`,"_", POS,":", REF, "/", ALT))
+
+
+isogenic_snv_ovcar8s_filt_adj <- isogenic_snv_ovcar8s  %>%
+  mutate(snv_start_ext = POS-5000,
+         snv_end_ext =  POS+5000,  ) %>%
+  left_join(isogenic_snv_ovcar8s %>%
+              dplyr::select(`#CHROM`, POS_2 = POS, SampleID),
+            by = join_by(`#CHROM` ==`#CHROM`, SampleID == SampleID, snv_start_ext <= POS_2, snv_end_ext >= POS_2)) %>%
+  filter(POS != POS_2)
+
+isogenic_snv_ovcar8s <- isogenic_snv_ovcar8s %>%
+   filter(!ID %in% isogenic_snv_ovcar8s_filt_adj$ID)
+
+
+#uwb1
+isogenic_snv_uwb1 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1/clairs_to/snv.vcf.gz", skip = '#CHROM', fill=TRUE) %>%
+  filter(FILTER == "PASS")
+
+isogenic_snv_uwb1_brca1 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/UWB1_BRCA1/clairs_to/snv.vcf.gz", skip = '#CHROM', fill=TRUE) %>%
+            filter(FILTER == "PASS") %>%
+            separate(starts_with("UWB1"), into =c("GT", "GQ", "DP", "AF", "AD"), sep = ":",extra =  "drop") %>%
+            mutate(AF = as.numeric(AF)) %>%
+            filter(AF >= 0.2) %>%
+            dplyr::select(-c( "GQ", "DP", ))%>%
+            mutate(SampleID = "UWB1_BRCA1") %>%
+  left_join(isogenic_snv_uwb1 %>%
+              dplyr::select(`#CHROM`, POS, REF, ALT) %>%
+              mutate(flag = "Parental")) %>%
+  filter(is.na(flag),GT == "0/1", 
+         `#CHROM` %in% paste0("chr", seq(1, 22))) %>%
+  mutate(ID = paste0(`#CHROM`,"_", POS,":", REF, "/", ALT))
+
+isogenic_snv_uwb1_brca1_filt_adj <- isogenic_snv_uwb1_brca1  %>%
+  mutate(snv_start_ext = POS-5000,
+         snv_end_ext = POS+5000) %>%
+  left_join(isogenic_snv_uwb1_brca1 %>%
+              dplyr::select(`#CHROM`, POS_2 = POS, SampleID),
+            by = join_by(`#CHROM` ==`#CHROM`, SampleID == SampleID, snv_start_ext <= POS_2, snv_end_ext >= POS_2)) %>%
+  filter(POS != POS_2)
+
+isogenic_snv_uwb1_brca1 <- isogenic_snv_uwb1_brca1 %>%
+   filter(!ID %in% isogenic_snv_uwb1_brca1_filt_adj$ID)
+
+library(rtracklayer)
+pileup_read_id_grange_a630<- isogenic_snv_ovcar8s %>%
+  filter(SampleID == "OVCAR8_LP_A6_30") %>%
+    mutate(start = POS,end = POS) %>%
+    dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(.)
+rtracklayer::export.bed(pileup_read_id_grange_a630, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_a630_merged_snv.bed"))
+
+pileup_read_id_grange_h453<- isogenic_snv_ovcar8s %>%
+  filter(SampleID == "OVCAR8_LP_H4_53") %>%
+    mutate(start = POS, end = POS) %>%
+    dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(.)
+
+rtracklayer::export.bed(pileup_read_id_grange_h453, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_h453_merged_snv.bed"))
+
+pileup_read_id_grange_ovcar8<- isogenic_snv_ovcar8s %>%
+  dplyr::select(`#CHROM`, POS) %>%
+  distinct() %>%
+    mutate(start = POS, end = POS) %>%
+    dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(.)
+
+rtracklayer::export.bed(pileup_read_id_grange_ovcar8, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_ovcar8_merged_snv.bed"))
+
+pileup_read_id_grange_uwb1_brca1 <- isogenic_snv_uwb1_brca1 %>%
+    mutate(start = POS, end = POS) %>%
+    dplyr::select(seqnames = `#CHROM`, start = start, end = end) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(.)
+
+rtracklayer::export.bed(pileup_read_id_grange_uwb1_brca1, paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/clair3_uwb1_brca1_merged_snv.bed"))
+
+
+#deletion read_mapping
+del_ovcar8s_seq <- isogenic_snv_ovcar8s %>%
+  mutate(start = POS, end = POS+ nchar(REF)) %>%
+  group_by(`#CHROM`, start, end, SampleID) %>%
+  group_map(~  detect_snvs_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+                      param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+                                                  what = c("qname", "seq"))),
+                      unique(.y$start),
+                      unique(.y$end),
+                      unique(.y$SampleID)))
+
+del_ovcars_seq_df <- do.call(rbind, del_ovcar8s_seq)
+
+del_ovcars_seq_df  <- del_ovcars_seq_df %>%
+  dplyr::select(read_id, read_alt_type, POS = region_start, snvStart, snvLength, SampleID) %>%
+  left_join(isogenic_snv_ovcar8s %>%
+              filter(type == "del")) %>%
+  mutate(read_type = case_when(abs(snv_size - snvLength) <  snvLength*0.1 & read_alt_type == "Deletion" ~"ALT",
+                                read_alt_type == "Match" ~"REF",
+                                TRUE ~"FAIL"))
+
+saveRDS(del_ovcars_seq_df%>%
+          filter(SampleID == "OVCAR8_LP_A6_30"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_a630_seq_df.RDS")
+saveRDS(del_ovcars_seq_df%>%
+          filter(SampleID == "OVCAR8_LP_H4_53"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/del_h453_seq_df.RDS")
+
+ins_ovcar8s_seq <- isogenic_snv_ovcar8s %>%
+  filter(type == "ins") %>%
+  mutate(start = POS, end = POS+ nchar(REF)) %>%
+  group_by(`#CHROM`, start, end, SampleID) %>%
+  group_map(~  detect_snvs_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+                      param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+                                                  what = c("qname", "seq"))),
+                      unique(.y$start),
+                      unique(.y$end),
+                      unique(.y$SampleID)))
+
+ins_ovcars_seq_df <- do.call(rbind, ins_ovcar8s_seq)
+
+ins_ovcars_seq_df  <- ins_ovcars_seq_df %>%
+  dplyr::select(read_id, read_alt_type, POS = region_start, snvStart, snvLength, SampleID) %>%
+  left_join(isogenic_snv_ovcar8s %>%
+              filter(type == "ins")) %>%
+  mutate(read_type = case_when(abs(snv_size - snvLength) <  snvLength*0.1 & read_alt_type == "Insertion" ~ "ALT",
+                               read_alt_type == "Match" ~"REF",
+                                TRUE ~"FAIL"))
+# 
+# saveRDS(ins_ovcars_seq_df %>%
+#           filter(SampleID == "OVCAR8_LP_A6_30"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_a630_seq_df.RDS")
+# saveRDS(ins_ovcars_seq_df %>%
+#           filter(SampleID == "OVCAR8_LP_H4_53"), "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_h453_seq_df.RDS")
+# 
+# del_uwb1_brca1_seq <- isogenic_indel_uwb1_brca1 %>%
+#   filter(type == "del") %>%
+#   mutate(start = POS, end = POS+ nchar(REF)) %>%
+#   group_by(`#CHROM`, start, end, SampleID) %>%
+#   group_map(~  detect_indels_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+#                       param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+#                                                   what = c("qname", "seq"))),
+#                       unique(.y$start),
+#                       unique(.y$end),
+#                       unique(.y$SampleID)))
+# 
+# del_uwb1_brca1_seq_df <- do.call(rbind, del_uwb1_brca1_seq)
+# 
+# del_uwb1_brca1_seq_df  <- del_uwb1_brca1_seq_df %>%
+#   dplyr::select(read_id, read_alt_type, POS = region_start, IndelStart, IndelLength, SampleID) %>%
+#   left_join(isogenic_indel_uwb1_brca1 %>%
+#               filter(type == "del")) %>%
+#   mutate(read_type = case_when(abs(indel_size - IndelLength) <  IndelLength*0.1 & read_alt_type == "Deletion" ~"ALT", 
+#                                 read_alt_type == "Match" ~"REF",
+#                                 TRUE ~"FAIL"))
+# 
+# saveRDS(del_uwb1_brca1_seq_df, "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/del_uwb1_brca1_seq_df.RDS")
+# 
+# ins_uwb1_brca1_seq <- isogenic_indel_uwb1_brca1 %>%
+#   filter(type == "ins") %>%
+#   mutate(start = POS, end = POS+ nchar(REF)) %>%
+#   group_by(`#CHROM`, start, end, SampleID) %>%
+#   group_map(~  detect_indels_in_region(readGAlignments(file = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/",unique(.y$SampleID), "/",unique(.y$SampleID),"_mapped_sc.bam"),use.names = T,
+#                       param = ScanBamParam(which = GRanges(unique(.y$`#CHROM`), IRanges(unique(.y$start), unique(.y$end))),
+#                                                   what = c("qname", "seq"))),
+#                       unique(.y$start),
+#                       unique(.y$end),
+#                       unique(.y$SampleID)))
+# 
+# ins_uwb1_brca1_seq_df <- do.call(rbind, ins_uwb1_brca1_seq)
+# 
+# ins_uwb1_brca1_seq_df  <- ins_uwb1_brca1_seq_df %>%
+#   dplyr::select(read_id, read_alt_type, POS = region_start, IndelStart, IndelLength, SampleID) %>%
+#   left_join(isogenic_indel_uwb1_brca1 %>%
+#               filter(type == "ins")) %>%
+#   mutate(read_type = case_when(abs(indel_size - IndelLength) <  IndelLength*0.1 & read_alt_type == "Insertion" ~ "ALT", 
+#                                read_alt_type == "Match" ~"REF",
+#                                 TRUE ~"FAIL"))
+# saveRDS(ins_uwb1_brca1_seq_df, "/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/landing_pad_mapping/clair3/ins_uwb1_brca1_seq_df.RDS")
+
+```
+
 ### INDEL DEL
 
 ```{r}
@@ -1583,6 +1784,9 @@ ggsave("plots/indel_del_overlap_ovcar8s_corr.pdf",height = 3, width = 5.5)
 isogenic_overlap_indels_venn(indel_del_h453 ,
                      indel_del_a630 , type = "DEL", "plots/indel_del_overlap_ovcar8s.tiff")
 ```
+
+
+
 
 ####indel DEL merge
 
@@ -2649,6 +2853,7 @@ alt_combined_annot_lnc %>%
 ```
 
 ##regression
+
 ```{r}
 library(VGAM) 
 alt_combined_annot_Gene <- alt_combined_annot %>%
@@ -3373,7 +3578,9 @@ https://github.com/Gaorav-Gupta-Lab/ScarMapper/blob/master/scarmapper/INDEL_Proc
         microhomology_size < 2 and ins_size < 5: [5] SNV, del_size > 1 and del_size == ins_size and 
         lft_del <= kmer_size and rt_del <= kmer_size
 ```
+
 ##deletion
+
 ```{r}
 merged_DEL_simp <- rbind(CpG_indel_del_fisher %>%
         dplyr::rename(alt_len = indel_size) %>%
@@ -3470,7 +3677,9 @@ deleted_microhom %>%
   facet_wrap(~Sample)+
   theme(legend.position = "bottom")
 ```
+
 ##insertion
+
 ```{r}
 merged_INS_simp <- rbind(CpG_indel_ins_fisher %>%
         dplyr::rename(alt_len = indel_size) %>%
@@ -4306,7 +4515,6 @@ pt <- permTest(A = breakpoints,
 summary(pt)
 plot(pt)
 ```
-
 
 # a6-30 window overlay with gene body annotation
 

@@ -20,8 +20,8 @@ set -e
 # load VEP #
 ###########
 module load vep/102
-input_file="${wk_dir}/intermediate/linc01011_variants_hg38.vcf"
-output_filestem="${wk_dir}/intermediate/linc01011_annotated"
+input_file="${wk_dir}/intermediate/hrr_snv_variants_hg38.vcf"
+output_filestem="${wk_dir}/intermediate/hrr_snv_annotated"
 env
 cmd=(vep)
 cmd+=(--input_file "${input_file}")

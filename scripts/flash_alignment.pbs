@@ -1,0 +1,24 @@
+#PBS -r n
+#PBS -l mem=128GB,walltime=30:00:00,ncpus=24
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+module load samtools/1.20
+module load minimap2/2.30
+module load htslib/1.19.1
+
+reference_fa="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/ref/reference/GCA_000001405.15_GRCh38_mus.GRCm39.fa"
+
+cd $wk_dir
+
+bam_input="data/${SampleID}/BAM/${SampleID}_sup.bam"
+bam_mapped="${wk_dir}/data/${SampleID}/BAM/${SampleID}_mapped_sc"
+
+samtools merge -@24 $bam_input data/${SampleID}/BAM/PAW*.bam
+
+samtools fastq -T"*" $bam_input | \
+minimap2 -ax map-ont -Y -y --MD -t 24 $reference_fa - | \
+samtools sort -@12 -O BAM --write-index -o ${bam_mapped}.bam##idx##${bam_mapped}.bai
+

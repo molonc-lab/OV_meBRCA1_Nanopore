@@ -13,7 +13,6 @@ qsub -v SampleID=${SampleID},wk_dir=${wk_dir} -N basecalling_${SampleID} 1_basec
 # trim fix
 basecalling_jobid=$(qstat -f | grep -w "basecalling_${SampleID}" | grep -oP '(\d{8})$' | uniq)
 qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N fix_trim_${SampleID} -W depend=afterok:${basecalling_jobid} 2_trim_fix_mod.pbs
-
 # alignment
 trimfix_jobid=$(qstat -f | grep -w "fix_trim_${SampleID}" | grep -oP '(\d{8})$' | uniq)
 qsub -v SampleID=$SampleID,wk_dir=$wk_dir -N alignment_${SampleID} -W depend=afterok:${trimfix_jobid} 3_alignment.pbs

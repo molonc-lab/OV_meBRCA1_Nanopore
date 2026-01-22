@@ -22,7 +22,7 @@ bam_mapped="${wk_dir}/output/${SampleID}/${SampleID}_mapped_sc.bam"
 
 me_pileup="${wk_dir}/Me_all/${SampleID}_pileup"
 modkit_log="${wk_dir}/Me_all/${SampleID}_modkit"
-
+type=5mc
 #pileup CpG 
 $modkit pileup $bam_mapped ${me_pileup}_${type}_cpg.bed --cpg --combine-strands --ref $reference_fa --threads 24 --log-filepath ${modkit_log}_pileup.log \
 --filter-threshold C:0.7 --filter-threshold A:0.8

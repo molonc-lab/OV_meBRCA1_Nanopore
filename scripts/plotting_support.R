@@ -490,6 +490,103 @@ detect_indels_in_region <- function(reads, region_start, region_end, SampleID) {
   return(result_df)
 }
 
+detect_snvs_in_region <- function(reads, region_start, region_end, SampleID) {
+  
+  results <- lapply(seq_along(reads), function(i) {
+    read <- reads[i]
+    
+    cigar_str <- as.character(cigar(read))[[1]]
+    ops  <- explodeCigarOps(cigar_str)[[1]]
+    lens <- explodeCigarOpLengths(cigar_str)[[1]]
+    
+    ref_cursor <- start(read)
+    query_cursor <- 1
+    
+    read_id <- names(read)
+    if (is.null(read_id) || length(read_id) == 0 || is.na(read_id) || read_id == "") {
+      read_id <- paste0("read_", i)
+    }
+    
+    read_snvs <- list()
+    region_covered <- FALSE
+    
+    for (j in seq_along(ops)) {
+      op  <- ops[j]
+      len <- lens[j]
+      
+      if (op %in% c("M", "=")) {
+        match_start <- ref_cursor
+        match_end   <- ref_cursor + len - 1
+        
+        if (match_start <= region_start && match_end >= region_end) {
+          region_covered <- TRUE
+        }
+        
+        ref_cursor   <- ref_cursor + len
+        query_cursor <- query_cursor + len
+        
+      } else if (op == "X") {
+        # Each base is a separate SNV
+        for (k in seq_len(len)) {
+          snv_pos <- ref_cursor
+          
+          if (snv_pos >= region_start && snv_pos <= region_end) {
+            read_snvs[[length(read_snvs) + 1]] <- data.frame(
+              read_id = read_id,
+              read_alt_type = "SNV",
+              SNV_pos = snv_pos,
+              SampleID = SampleID,
+              region_start = region_start,
+              stringsAsFactors = FALSE
+            )
+          }
+          
+          ref_cursor   <- ref_cursor + 1
+          query_cursor <- query_cursor + 1
+        }
+        
+      } else if (op == "D") {
+        ref_cursor <- ref_cursor + len
+        
+      } else if (op == "I") {
+        query_cursor <- query_cursor + len
+      }
+    }
+    
+    # If no SNVs and region fully covered
+    if (length(read_snvs) == 0 && region_covered) {
+      return(data.frame(
+        read_id = read_id,
+        read_alt_type = "Match",
+        SNV_pos = NA_integer_,
+        SampleID = SampleID,
+        region_start = region_start,
+        stringsAsFactors = FALSE
+      ))
+    } else if (length(read_snvs) > 0) {
+      return(do.call(rbind, read_snvs))
+    } else {
+      return(NULL)
+    }
+  })
+  
+  result_df <- do.call(rbind, results)
+  
+  if (is.null(result_df)) {
+    result_df <- data.frame(
+      read_id = character(0),
+      read_alt_type = character(0),
+      SNV_pos = integer(0),
+      SampleID = SampleID,
+      region_start = region_start,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  return(result_df)
+}
+
+
 
 
 match_clair3_meth <- function(T_read_mapping_RDS, T_modkit_extract, N_modkit_extract){

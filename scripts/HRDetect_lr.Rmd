@@ -259,6 +259,7 @@ bkp <- bkp[order(bkp$chr,bkp$pos),]
 
 
 ```
+
 ```{r define_supporting_info, echo=FALSE}
 
 sig_list_cosmicv2 <- c("Sig3", "Sig6",
@@ -335,6 +336,22 @@ snv <- c(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/clairs
             mutate(SampleID = str_extract(.x, "(?<=/output/)[^/]+")))%>%
   dplyr::select(SampleID, chr = `#CHROM`, POS, REF, ALT) 
 
+
+maf <- c(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/clairs_to/*.qanno.maf") ,
+         Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/LUNG_bam/output/*/clairs_to/*.qanno.maf"))%>%
+  map_dfr(~fread(.x, skip =  "Hugo_Symbol") %>%
+            mutate(SampleID = gsub(".qanno.maf", "", basename(.x)))) %>%
+  filter(QFlag == "PASS")
+  
+
+snv <- snv %>%
+  inner_join(maf %>%
+              mutate(chr = paste0("chr", Chromosome )) %>%
+              dplyr::select(SampleID,chr, POS = Start_Position))
+
+
+
+
 sigs_input <- snv %>%
   group_by(SampleID) %>%
   group_map( ~ mut.to.sigs.input(mut.ref = data.frame(.x),
@@ -360,7 +377,7 @@ cosmic_sigs <- as.data.frame(t(cosmic_t)) %>%
 
 
 sig_cosmic_default<-lapply(sigs_input, function(x) {run_deconstructsigs(data = x, 
-                                          out_path = "../output/scarHRD/",
+                                          out_path = "../output/scarHRD/testfilter/",
                                           out_name = paste(rownames(x),"cosmicv2_sig", sep ="_"),
                                           signatures = cosmic_sigs,
                                           method = "default", 
@@ -368,7 +385,7 @@ sig_cosmic_default<-lapply(sigs_input, function(x) {run_deconstructsigs(data = x
                                           cutoff=0.10)})
 
 
-cosmic2_sig <- Sys.glob("../output/scarHRD/default_*_sig.tsv") %>%
+cosmic2_sig <- Sys.glob("../output/scarHRD/testfilter/default_*_sig.tsv") %>%
   map_dfr(~fread(.x, colClasses = c("Sample"= "character"))) %>%
   dplyr::rename(SampleID=Sample) %>%
   left_join(snv %>%
@@ -398,15 +415,12 @@ snv_hrdetect_sigs <- sig_cosmic_default %>%
   mutate_at(vars(starts_with("Sig")),list(~.*snv_count)) %>%
   dplyr::select(SampleID, Sig3, Sig8)
 
-
 sample_name_mapping=data.frame(SampleID = c("OVCAR8", "OVCAR8_LP_A6_30","OVCAR8_LP_H4_53", "UWB1", "UWB1_BRCA1", "WEHI_CS62",
-                                          "134011_1910_T4", "134062_9174_T4", "SFRC01585S1_2163_T3","SFRC01428S1_22235_T2",
-                                          "SFRC01865S1_T1_242","134048_7794_T2", "SFRC01495S2_1537_T1",  "SOLACE2_0126S1_25285_T2",
-                                          "134169_6606_T2", "SFRC01865S1_T1_2422", "3300152","3300199"),
-                               alt_name =  c("OVCAR8", "A6-meth","H4-KO", "UWB1", "UWB1+BRCA1", "WEHI CS62",
-                                          "134011", "134062", "SFRC01585","SFRC01428",
-                                          "SFRC01865","134048", "SFRC01495",  "SFRC01951",
-                                          "134169", "SFRC01865", "SCLC","NSCLC"))
+                                          "134011_1910_T4", "134062_9174_T4", "SFRC01585S1_2163_T3","SFRC01428S1_22235_T2", "134048_7794_T2", "SFRC01495S2_1537_T1",  "SOLACE2_0126S1_25285_T2", "134169_6606_T2", "SFRC01865S1_T1_2422", "SFRC01334S1_107_T5", "3300152","3300199"),
+                               alt_name =  c("OVCAR8", "OVCAR8 A6-meth","OVCAR8 H4-KO", "UWB1", "UWB1+BRCA1", "WEHI CS62",
+                                          "PDX #11", "PDX #62", "PDX #585","PDX #428",
+                                          "PDX #48", "PDX #495",  "PDX #951",
+                                          "PDX #169", "PDX #865", "PDX #334", "SCLC","NSCLC"))
 
 bind_rows(sigs_input) %>%
   rownames_to_column("SampleID")  %>%
@@ -419,7 +433,7 @@ bind_rows(sigs_input) %>%
   mutate(total_cnts = sum(cnts)) %>%
   ungroup()%>%
   mutate(percent = cnts/total_cnts,
-         alt_name = factor(alt_name, levels = c( "WEHI CS62","OVCAR8", "A6-meth", "NSCLC", "SCLC",  "H4-KO", "UWB1", "UWB1+BRCA1", "134011",  "134062", "134169","SFRC01585","134048", "SFRC01428", "SFRC01495",  "SFRC01865", "SFRC01951"))) %>%
+         alt_name = factor(alt_name, levels =c("PDX #11",  "PDX #334", "PDX #585", "PDX #62", "PDX #951", "PDX #169", "PDX #495", "PDX #428", "PDX #865","PDX #48", "WEHI CS62", "OVCAR8 A6-meth" , "OVCAR8", "OVCAR8 H4-KO", "UWB1", "UWB1+BRCA1", "NSCLC", "SCLC"))) %>%
   ggplot(aes(x = ref, y = percent, fill = alt))+
   geom_bar(stat = "identity")+
   scale_fill_manual(values = c("C>A" ="#04BDEE", "C>G" = "black", "C>T" = "#E42A25", "T>A" = "grey", "T>C" = "#A3CE62", "T>G" = "#ECC6C5"))+
@@ -527,16 +541,16 @@ CNV <- c(Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/LUNG_bam/output
     A_cn = total_cn - B_cn) %>%
   left_join(ploidy %>%
               dplyr::select(SampleID, ploidy)) %>%
-  group_by(SampleID, Chromosome, grp = cumsum(lag(A_cn, default = first(A_cn)) != A_cn | 
-                                    lag(B_cn, default = first(B_cn)) != B_cn | 
-                                    lag(total_cn, default = first(total_cn)) != total_cn)) %>%
+  group_by(SampleID, Chromosome, grp = cumsum(lag(A_cn, default = dplyr::first(A_cn)) != A_cn | 
+                                    lag(B_cn, default = dplyr::first(B_cn)) != B_cn | 
+                                    lag(total_cn, default = dplyr::first(total_cn)) != total_cn)) %>%
   summarise(
-    Start_position = first(Start_position),
+    Start_position = dplyr::first(Start_position),
     End_position = last(End_position),
-    A_cn = first(A_cn),
-    B_cn = first(B_cn),
-    total_cn = first(total_cn),
-    ploidy = first(ploidy),
+    A_cn = dplyr::first(A_cn),
+    B_cn = dplyr::first(B_cn),
+    total_cn = dplyr::first(total_cn),
+    ploidy = dplyr::first(ploidy),
     .groups = "drop"
   ) %>%
   dplyr::select(-grp)%>%
@@ -560,7 +574,7 @@ scarHRD_summary <- list.files(path="/working/lab_olgak/lijunX/OV_meBRCA1_Nanopor
 
 ### HRdetect predictions
 
-First, clean up all the inputs for HRdetect input.  
+dplyr::first, clean up all the inputs for HRdetect input.  
 
 ```{r clean_up}
 

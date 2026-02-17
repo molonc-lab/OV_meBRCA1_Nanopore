@@ -1,0 +1,16 @@
+#!/bin/bash
+#######################
+#PBS -N MMSeekR
+#PBS -l ncpus=16,mem=100gb,walltime=01:00:00
+#PBS -j oe
+#PBS -m ae
+#PBS -r n
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+#######################
+
+set -e
+module load R/4.3.1
+
+Rscript --vanilla ${wk_dir}/scripts/MMSeekR.R ${wk_dir} ${SampleID}

@@ -156,16 +156,15 @@ lr_pdx<- paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/Me_all/",PDX, "_p
 ###5mC
 
 ```{r}
-cell_line_5mc <- lr_cell_line %>%
-  filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22)))
-
-pdx_5mc <- lr_pdx %>%
-  filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22)))
-
-
-saveRDS(cell_line_5mc, "intermediate/cell_line_5mc.RDS")
-saveRDS(pdx_5mc, "intermediate/pdx_5mc.RDS")
-
+# cell_line_5mc <- lr_cell_line %>%
+#   filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22)))
+# 
+# pdx_5mc <- lr_pdx %>%
+#   filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22)))
+# 
+# 
+# saveRDS(cell_line_5mc, "intermediate/cell_line_5mc.RDS")
+# saveRDS(pdx_5mc, "intermediate/pdx_5mc.RDS")
 
 cell_line_5mc <- read_rds("intermediate/cell_line_5mc.RDS")
 pdx_5mc <- read_rds("intermediate/pdx_5mc.RDS")
@@ -345,66 +344,6 @@ ovcar8_tpm <- data.frame(log_tpm, check.names = F) %>%
               rownames_to_column("ENSG_ID")) %>%
   pivot_longer(-c("ENSG_ID", "Associated Gene Name"), names_to = "sample", values_to = "log_tpm") 
 
-cell_line_tpm_plot <- rbind(ovcar8_tpm,
-      uwb1_tpm)%>%
-  filter(`Associated Gene Name` == "BRCA1") %>%
-  mutate(alt_name = case_when(str_detect(sample, "OVCAR8_LPA6_30") ~ "OVCAR8 A6-meth",
-                              str_detect(sample, "OVCAR8") ~ "OVCAR8",
-                              str_detect(sample, "UWB1289BRCA1") ~ "UWB1+BRCA1",
-                              str_detect(sample, "UWB1289") ~ "UWB1"),
-         alt_name = factor(alt_name, levels =c("OVCAR8 A6-meth", "OVCAR8", "UWB1", "UWB1+BRCA1")),
-          meBRCA1 = case_when(str_detect(sample, "OVCAR8_LPA6_30") ~ "Hom meBRCA1",
-                              str_detect(sample, "OVCAR8") ~ "Het meBRCA1",
-                              str_detect(sample, "UWB1289BRCA1") ~ "Restored BRCA1",
-                              str_detect(sample, "UWB1289") ~ "Mut BRCA1"),
-         type = "Cell line") %>%
-  ggplot(aes(x = alt_name, y = log_tpm))+
-  geom_point(aes(color = meBRCA1))+
-  stat_summary(fun.data = median_hilow, geom = "errorbar", width = 0.2, alpha = 0.5,
-               aes(color = meBRCA1))+
-  stat_summary(fun = mean, geom = "crossbar", linewidth = 0.2,width = 0.25, alpha = 0.5) +
-  theme_bw()+
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 60, hjust = 1),
-        strip.background = element_rect(fill = NA),
-        legend.position = "bottom")+
-  ylab("BRCA1 Expression (log(TPM))")+
-  facet_wrap(~type)+
-  scale_color_manual(values = sample_palette2)
-
-ggsave(plot = cell_line_tpm_plot,filename =  "plots/cell_line_brca1_mRNA.pdf", height = 3.5, width =4)
-
-
-ggarrange(cell_line_tpm_plot, pdx_mrna, common.legend = T, align = "hv", legend = "bottom")
-ggsave( "plots/cell_line_brca1_mRNA.pdf", height = 4.5, width =8)
-
-
-rbind(ovcar8_tpm,
-      uwb1_tpm)%>%
-  filter(`Associated Gene Name` == "NBR2") %>%
-  mutate(alt_name = case_when(str_detect(sample, "OVCAR8_LPA6_30") ~ "OVCAR8 A6-meth",
-                              str_detect(sample, "OVCAR8") ~ "OVCAR8",
-                              str_detect(sample, "UWB1289BRCA1") ~ "UWB1+BRCA1",
-                              str_detect(sample, "UWB1289") ~ "UWB1"),
-         alt_name = factor(alt_name, levels =c("OVCAR8 A6-meth", "OVCAR8", "UWB1", "UWB1+BRCA1")),
-          meBRCA1 = case_when(str_detect(sample, "OVCAR8_LPA6_30") ~ "Hom meBRCA1",
-                              str_detect(sample, "OVCAR8") ~ "Het meBRCA1",
-                              str_detect(sample, "UWB1289BRCA1") ~ "Restored BRCA1",
-                              str_detect(sample, "UWB1289") ~ "Mut BRCA1"),
-         type = "Cell line") %>%
-  ggplot(aes(x = alt_name, y = log_tpm))+
-  geom_point(aes(color = meBRCA1))+
-  stat_summary(fun.data = median_hilow, geom = "errorbar", width = 0.2, alpha = 0.5,
-               aes(color = meBRCA1))+
-  stat_summary(fun = mean, geom = "crossbar", linewidth = 0.2,width = 0.25, alpha = 0.5) +
-  theme_bw()+
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 60, hjust = 1),
-        strip.background = element_rect(fill = NA),
-        legend.position = "bottom")+
-  ylab("BRCA1 Expression (log(TPM))")+
-  facet_wrap(~type)+
-  scale_color_manual(values = sample_palette2)
 ```
 
 ### ICGC mRNA & methylation
@@ -822,37 +761,9 @@ ggarrange(
 ggsave("plots/reads_resolution_2.pdf",  height = 297*1.5/1.2, width =180/1.2 , units = "mm" )
 
 
-plot_list <- BRCA1_meth %>%
-  filter(ref_position <= 43126118, ref_position >=  43125532) %>%
-  mutate(read_id = factor(read_id, levels = read_order$read_id)) %>%
-  group_by(meBRCA1, alt_name) %>%
-  group_map(~ 
-  ggplot(.x, aes(x =ref_position, y = read_id, color = Meth))+
-  
-  geom_point()+
-  facet_wrap(~alt_name, nrow = 8, dir = "v", scales = "free_y")+
-  theme_bw()+
-    scale_colour_manual(values = methylation_palette, "5mC")+
-   
-    coord_cartesian(xlim = c(43125532, 43126118))+
-  theme(
-    panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-      axis.text.y = element_blank(),
-      axis.title.y = element_blank(),
-        axis.title.x = element_blank(),
-        strip.background = element_blank(),
-      strip.text = element_text(colour=sample_palette2[unique(.x$meBRCA1)], face = "bold", hjust = 0.5), 
-        axis.ticks.y = element_blank()), .keep = T)
 
-
-ggsave(plot = plot_list[[1]], filename = "plots/read_level_brca1_prom_1.pdf", height = 5, width = 6)
-for (i in seq(length(plot_list))){
-  ggsave(plot = plot_list[[i]], filename = paste0("plots/read_level_brca1_prom_",i,".pdf"), height = 5, width = 6)
-}
 
 ```
-
 
 ##NBR1 methylation status
 
@@ -1381,21 +1292,21 @@ global_stat_u <- global_filtered %>%
   filter(alt_name %in% c("UWB1", "UWB1+BRCA1")) %>%
   # group_by(Sample)%>%
   # sample_n(4000) %>%
-  # ungroup() %>%
+  ungroup() %>%
   compare_means(fraction_mod ~ alt_name, data =.,  ref.group = "UWB1+BRCA1") 
 
 global_stat_o <- global_filtered %>%
-  filter(alt_name %in% c("OVCAR8", "OVCAR8 LP A6-30", "OVCAR8 LP H4-KO")) %>%
+  filter(alt_name %in% c("OVCAR8", "OVCAR8 A6-meth", "OVCAR8 H4-KO")) %>%
   # group_by(Sample)%>%
   # sample_n(4000) %>%
-  # ungroup() %>%
+  ungroup() %>%
   compare_means(fraction_mod ~ alt_name, data =.,  ref.group = "OVCAR8") 
 
 cell_line_5mc <- global_filtered %>%
   group_by(Sample)%>%
-  sample_n(n() *0.1) %>%
+  sample_n(n() *0.01) %>%
   ungroup() %>%
-  mutate(alt_name = factor(alt_name, levels = c("OVCAR8", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53",  "UWB1+BRCA1", "UWB1","WEHI CS62"))) %>%
+  mutate(alt_name = factor(alt_name, levels = c("OVCAR8", "OVCAR8 A6-meth", "OVCAR8 H4-KO", "UWB1+BRCA1", "UWB1","WEHI CS62"))) %>%
   ggplot(aes(x = alt_name, y = fraction_mod, color = HR))+
   geom_violin()+
   stat_summary(fun = "median",
@@ -1407,17 +1318,46 @@ cell_line_5mc <- global_filtered %>%
                            global_stat_o %>%
                              mutate(y.position = 100+ 5 *row_number())), label = "p.format")+
   scale_color_manual(values = hrd_palette)+
-  scale_y_continuous(name  = "Proportion 5mC")+
+  scale_y_continuous(name  = "5mC%")+
   theme_bw()+
   theme(legend.position = "bottom",
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 60, hjust = 1))
-ggsave(plot = cell_line_5mc, "plots/cell_line_global_comparison.pdf", height =5, width = 5.5)
+ggsave(plot = cell_line_5mc, "plots/cell_line_global_comparison.pdf", height =5, width = 5)
 
 
 global_filtered %>%
   group_by(alt_name)%>%
   summarise(median_meth = median(fraction_mod))
+
+```
+
+###pmd change
+
+```{r}
+
+pmd_ovcar8 <- fread("output/MMSeekR/OVCAR8_LP_A6_30.multiModel.PMDs.bed") %>%
+   `colnames<-`(c("chrom", "PMD_start", "PMD_end"))
+
+cell_line_pmd <- pmd_ovcar8 %>%
+  inner_join(global_filtered %>%
+               dplyr::filter(alt_name %in% c("OVCAR8", "OVCAR8 A6-meth", "OVCAR8 H4-KO")) %>%
+              dplyr::select(chrom, start, fraction_mod, Sample),
+            by = join_by(chrom == chrom,PMD_start <= start, PMD_end >= start)) 
+
+cell_line_pmd%>%
+  group_by(Sample)%>%
+  sample_n(n() *0.01) %>%
+  ungroup() %>%
+  left_join(sample_name_mapping %>%
+              dplyr::rename(Sample = sample)) %>%
+  mutate(alt_name = factor(alt_name, levels = c("OVCAR8", "OVCAR8 A6-meth", "OVCAR8 H4-KO", "UWB1+BRCA1", "UWB1","WEHI CS62"))) %>%
+  ggplot(aes(x = alt_name, y = fraction_mod, color = Sample))+
+  geom_violin()+
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               color = "black",
+               width = 0.1)
 
 ```
 
@@ -1610,7 +1550,7 @@ global_filtered %>%
   group_by(Sample)%>%
   sample_n(n() *0.1) %>%
   ungroup() %>%
-  mutate(alt_name = factor(alt_name, levels = c("OVCAR8", "OVCAR8 LP A6-30", "OVCAR8 LP H4-53",  "UWB1+BRCA1", "UWB1","WEHI CS62")),
+  mutate(alt_name = factor(alt_name, levels = c("OVCAR8", "OVCAR8 A6-30", "OVCAR8 H4-53",  "UWB1+BRCA1", "UWB1","WEHI CS62")),
          fraction_mod = if_else(fraction_mod == 0, 10^-1, fraction_mod)) %>%
   ggplot(aes(x = alt_name, y = fraction_mod, color = HR))+
   geom_violin()+
@@ -1938,6 +1878,12 @@ a6_30_me_sv %>%dplyr::select(`#CHROM`, start, end, fraction_mod, Sample, Nvalid_
   summarise(median_mod = mean(fraction_mod),
             Nvalid_med = mean(Nvalid_cov))
 
+```
+
+###overlap modkit isogenic
+
+```{r}
+ovcar8 <- fread()
 ```
 
 #DMP --all samples
@@ -2690,20 +2636,19 @@ ggsave("plots/supplementary_icgc_bnc1_sample_type.pdf", height = 10, width = 7)
 #PMD
 
 ```{r}
-library(MMSeekR)
-
-# lr_pdx %>%
-#   filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22))) %>%
+# library(MMSeekR)
+# 
+# pdx_5mc %>%
+#   filter(Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", c(seq(1,22), "X"))) %>%
 #   group_by(Sample) %>%
 #   group_walk(~ fwrite(.x%>%
 #                           dplyr::select(chrom, end, Nvalid_cov, Nmod), file = paste0("output/", unique(.y$Sample), "/Me/", unique(.y$Sample), "_MMSeekR.tsv" ), col.names = F, quote = F, sep = "\t"), .keep = T)
 # 
-# 
-# lr_pdx %>%
-#   filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22))) %>%
+# cell_line_5mc %>%
+#   filter(Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", c(seq(1,22), "X"))) %>%
 #   group_by(Sample) %>%
-#   group_walk(~ fwrite(.x%>%
-#                           dplyr::select(chrom, end, Nvalid_cov, Nmod), file = paste0("output/", unique(.y$Sample), "/Me/", unique(.y$Sample), "_MMSeekR.tsv" ), col.names = F, quote = F, sep = "\t"), .keep = T)
+#   group_walk(~  fwrite(.x%>%
+#                           dplyr::select(chrom, end, Nvalid_cov, Nmod), file = paste0("output/", unique(.y$Sample),"/Me/", unique(.y$Sample), "_MMSeekR.tsv" ), col.names = F, quote = F, sep = "\t"), .keep = T)
 # 
 # 
 # me_mapping <- data.frame(filepath = Sys.glob("output/*/Me/*_MMSeekR.tsv")) %>%
@@ -2713,11 +2658,175 @@ library(MMSeekR)
 # apply(me_mapping,1, function(x) runMultiModel("hg38", x["filepath"], x["outputpath"], num.cores = 16))
 # 
 
+# library(rtracklayer)
+# multiinter <- fread("output/MMSeekR/sample_merged_MMSeekR.multiModel.PMDS.bed") %>%
+#   dplyr::select(chrom, start, end, num, list) %>%
+#   mutate(common = num >=16*0.7)
+# 
+# pmd <- multiinter %>%
+#   filter(common)
+# pmd <- pmd %>% 
+#   dplyr::select(seqnames = chrom, start = start, end = end) %>%
+#   distinct() %>%
+#   makeGRangesFromDataFrame(.)
+# 
+# rtracklayer::export.bed(pmd, "output/MMSeekR/common_pmd_g0.7.bed")
+# 
 
-lr_pmd <- Sys.glob("output/*/Me/*_MMSeekR.tsv") %>%
-  map_dfr(~ fread(.x) %>%
-            mutate(Sample = gsub("_MMSeekR.tsv", "", basename(.x))))
+```
 
+```{r}
+pmd <- Sys.glob("output/MMSeekR/*_common_pmd.tsv") %>%
+  map_dfr(~fread(.x) %>%
+            mutate(Sample = gsub("_common_pmd.tsv", "", basename(.x)))) %>%
+  mutate(pos= paste(`#chrom`,start, end, sep ="_")) %>%
+  dplyr::select(pos, percent_m, Sample)
+  
+pmd<- pmd%>%
+  dt_pivot_wider(names_from = Sample, values_from = percent_m)
+ 
+pmd<- pmd%>%  
+   column_to_rownames("pos")
+
+Heatmap(pmd, cluster_columns = T, cluster_rows = F, use_raster = T, raster_by_magick = T, raster_quality = 1, show_row_names = F)
+```
+
+```{r}
+
+pmd_files <- list.files("output/MMSeekR", pattern="*_MMSeekR_models.multiModel.PMDs.bed", full.names=TRUE)
+
+pmd_common <- fread("output/MMSeekR/common_pmd_g0.7.bed") 
+pmd_common_gr <-  GRanges(seqnames = pmd_common$V1, ranges = IRanges(pmd_common$V2, pmd_common$V3))
+
+# Optional: name each element by sample name
+sample_names <- gsub("_MMSeekR_models.multiModel.PMDs.bed", "", basename(pmd_files))
+
+# Import as GRanges
+pmd_list <- lapply(pmd_files, function(f) {
+  df <- fread(f, header=FALSE)
+  GRanges(seqnames = df$V1, ranges = IRanges(df$V2, df$V3))
+})
+names(pmd_list) <- sample_names
+
+
+seqlengths <- c(
+  chr1=248956422, chr2=242193529, chr3=198295559,
+  chr4=190214555, chr5=181538259, chr6=170805979,
+  chr7=159345973, chr8=145138636, chr9=138394717,
+  chr10=133797422, chr11=135086622, chr12=133275309,
+  chr13=114364328, chr14=107043718, chr15=101991189,
+  chr16=90338345, chr17=83257441, chr18=80373285,
+  chr19=58617616, chr20=64444167, chr21=46709983,
+  chr22=50818468, chrX=156040895
+)
+
+bins <- tileGenome(
+  seqlengths = seqlengths,
+  tilewidth = 50000,
+  cut.last.tile.in.chrom = TRUE
+)
+mcols(bins)$bin_id <- seq_along(bins)
+
+
+island_gr <-GRanges(seqnames = isl_annot$chrom,
+                     ranges = IRanges(start=isl_annot$chromStart, end=isl_annot$chromEnd))
+island_bins <- bins[countOverlaps(bins, island_gr) > 0]
+pmd_ovcar8_bins <- bins[countOverlaps(bins, pmd_list[["OVCAR8"]]) > 0]
+
+pmd_common_binds <- bins[countOverlaps(bins, pmd_common_gr) > 0]
+
+sample_info <- tibble(
+  Sample = c("OVCAR8", "OVCAR8_LP_A6_30", "OVCAR8_LP_H4_53","UWB1", "UWB1_BRCA1", "WEHI_CS62", "134011_1910_T4", "134062_9174_T4" ,"SFRC01428S1_22235_T2","134048_7794_T2", "SFRC01495S2_1537_T1", "SOLACE2_0126S1_25285_T2", "134169_6606_T2" , "SFRC01865S1_T1_2422", "SFRC01585S1_2163_T3", "SFRC01334S1_107_T5"),
+  condition = c("HRP", "HRD", "HRD","HRD", "?","?", "HRD", "HRD", "HRP", "HRP", "HRP", "HRP","HRP", "HRP", "?", "?"),
+ type = c("cellline","cellline","cellline","cellline","cellline","cellline","pdx","pdx","pdx","pdx","pdx","pdx","pdx","pdx","pdx","pdx"  ))
+
+HRD_HRP_meth <- rbind(cell_line_5mc %>%
+  filter(Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", c(seq(1,22), "X"))) ,
+  pdx_5mc%>%
+  filter(Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", c(seq(1,22), "X"))))
+
+cpg_gr <- GRanges(
+  seqnames = HRD_HRP_meth$chrom,
+  ranges   = IRanges(start = HRD_HRP_meth$start, end = HRD_HRP_meth$end),
+  coverage = HRD_HRP_meth$Nvalid_cov,
+  meth     = HRD_HRP_meth$fraction_mod,
+  Sample   = HRD_HRP_meth$Sample
+)
+
+hits <- findOverlaps(bins, cpg_gr)
+
+bin_meth <- tibble(
+  bin_id = queryHits(hits),
+  Sample = mcols(cpg_gr)$Sample[subjectHits(hits)],
+  meth   = mcols(cpg_gr)$meth[subjectHits(hits)],
+  coverage = mcols(cpg_gr)$coverage[subjectHits(hits)]
+) %>%
+  group_by(bin_id, Sample) %>%
+  summarise(
+    mean_meth = sum(meth * coverage)/sum(coverage),
+    n_cpg = n(),
+    .groups="drop"
+  ) %>%
+  filter(n_cpg >= 10) %>%
+  left_join(sample_info, by="Sample")
+
+bin_meth_cellline <- bin_meth %>%
+  filter(type=="cellline") %>%
+  mutate(feature = case_when(
+    bin_id %in% island_bins$bin_id ~ "Island",
+    bin_id %in% pmd_common_binds$bin_id ~ "PMD",
+    
+    TRUE ~ "Other"
+  ))
+
+bin_meth_cellline%>%
+  # filter(condition != "?") %>%
+  left_join(sample_name_mapping %>%
+              dplyr::select(Sample= sample, alt_name)) %>%
+  mutate(feature= factor(feature, levels = c("Island", "PMD", "Other"))) %>%
+  ggplot( aes(x=alt_name, y=mean_meth, fill=condition)) +
+  geom_violin(position=position_dodge(width=0.8))+
+  stat_summary(fun = "median",
+               geom = "crossbar", 
+               color = "black",
+               width = 0.1,
+               position=position_dodge(width=0.8))+
+  facet_wrap(~feature) +  # PMD / Island / Other
+  labs(y="5mC (%)", x="Sample") +
+  theme_minimal(base_size=14) +
+  scale_fill_manual(values=hrd_palette) +
+  stat_compare_means(
+    comparisons = list(c("OVCAR8", "OVCAR8 A6-meth"),
+                       c("OVCAR8", "OVCAR8 H4-KO")),
+    method = "wilcox.test"
+  )+
+  theme(legend.position = "bottom")
+
+ggsave("plots/globalmethylation_cell_line_5mc.pdf", height = 6, width = 16)
+
+bin_meth_pdx <- bin_meth %>% filter(type=="pdx")
+
+bin_meth_pdx$feature <- case_when(
+  bin_meth_pdx$bin_id %in% mcols(island_bins)$bin_id ~ "Island",
+  bin_meth_pdx$bin_id %in% mcols(pmd_common_binds)$bin_id ~ "PMD",
+  TRUE ~ "Other"
+)
+
+library(ggridges)
+bin_meth_pdx %>%
+  filter(condition != "?") %>%
+  left_join(sample_name_mapping %>%
+              dplyr::select(Sample= sample, alt_name)) %>%
+  mutate(feature= factor(feature, levels = c("Island", "PMD", "Other")),
+         alt_name = factor(alt_name, levels =c("PDX #11", "PDX #62", "PDX #585","PDX #428","PDX #48", "PDX #495",  "PDX #951", "PDX #169", "PDX #865", "PDX #334"))) %>%
+ggplot(aes(x=mean_meth, y=alt_name, fill=condition)) +
+  geom_density_ridges(alpha=0.6, scale=1) +
+  facet_wrap(~feature, scales="free_x") +
+  scale_fill_manual(values=hrd_palette)+
+  labs(y="5mC (%)", x="Sample") +
+  theme_minimal(base_size=14)
+
+ggsave("plots/globalmethylation_pdx_5mc.pdf", height = 15, width = 16)
 
 ```
 
@@ -2844,24 +2953,21 @@ ovcar8_dmp_re_annot%>%
 #mRNA --pdx BRCA1
 
 ```{r}
-pdx_mrna <- pdx_tpm%>%
-  filter(`Associated Gene Name` == "BRCA1") %>%
-  mutate(meBRCA1 = factor(meBRCA1, levels = c("Hom meBRCA1", "Het meBRCA1", "Mut BRCA1", "Restored BRCA1")),
-         type = "PDX") %>%
+
+pdx_tpm%>%
+  filter(`Associated Gene Name` == "BRCA1")%>%
+  mutate(meBRCA1 = factor(meBRCA1, levels = c("Hom meBRCA1", "Het meBRCA1"))) %>%
   ggplot(aes(y = log_tpm, x =meBRCA1, color = meBRCA1, label = alt_name))+
   geom_point()+
-  
   geom_text_repel(nudge_x = 0.4,segment.color = 'grey50')+
-  scale_colour_manual(values = sample_palette2, drop = FALSE)+
-  facet_wrap(~type)+
+  scale_colour_manual(values = sample_palette)+
   theme_bw()+
   theme(axis.title.x = element_blank(),
-        strip.background = element_rect(fill = NA),
-        axis.text.x = element_text(angle = 60, hjust = 1),
+        
         legend.position = "bottom")+
-  ylab("BRCA1 Expression (log(TPM))")
-ggsave(plot = pdx_mrna , filename = "plots/PDX_BRCA1_mRNA.pdf", height = 4.5, width =5.5)
-
+  ylab("NBR2 Expression (log(TPM))")+
+  stat_compare_means()
+ggsave("plots/PDX_BRCA1_mRNA.pdf", height = 3.5, width =4.5)
 
 pdx_tpm%>%
   filter(`Associated Gene Name` == "NBR2")%>%
@@ -2877,9 +2983,6 @@ pdx_tpm%>%
   ylab("NBR2 Expression (log(TPM))")+
   stat_compare_means()
 ggsave("plots/PDX_NBR2_mRNA.pdf", height = 3.5, width =4.5)
-
-
-
 
 gene_name_within <- transcript_annot %>%
  inner_join(changed_cpg %>%
@@ -2899,7 +3002,6 @@ pdx_tpm%>%
   theme(axis.title.x = element_blank(),
         legend.position = "none")+
   ylab(paste(unique(.y$`Associated Gene Name`),"Expression (log(TPM))")))
-
 ```
 
 # test cdcc180
@@ -3974,8 +4076,8 @@ tldr %>%
 
 ```
 
-
 #variants annotation
+
 ```{r}
 
 # for (i in c(cell_line, PDX, "HCC1937")){
@@ -5545,20 +5647,116 @@ hm27_annot <-fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/H
   filter(str_detect(genesUniq, "BNC1|BRCA1"),
         CpG_end == 83285478| CpG_chrm == "chr17")
 
+DDR_score <-as.data.frame(fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/ddr_scores/DDRscores.tsv", header= F, na.strings = "NaN", fill = T))
+DDR_score_colname <- unlist(fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/ddr_scores/Scores.tsv", header = F))
+DDR_score_rowname <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/supporting/ddr_scores/Samples.tsv", header = F)
+colnames(DDR_score) <- DDR_score_colname
+DDR_score$Sample.ID_short<- DDR_score_rowname$V1
+
+
+tcga_ov_sample_mapping <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/raw/20230711_TCGA_OV_meth/IDAT/TCGA_OV_pd.csv") %>%
+  dplyr::select(Sample_Name, Sample_Group, Sample.ID) %>%
+  mutate(Sample.ID = substr(Sample.ID, 1, 15)) %>%
+  left_join(DDR_score %>%
+              dplyr::select( Sample.ID =Sample.ID_short, HRD_Score))
+
 tcga_ov_beta %>%
   inner_join(hm27_annot %>%
                dplyr::select(probeID, genesUniq), by = c("V1"= "probeID")) %>%
-  dt_pivot_longer(cols = -c(V1, genesUniq), names_to = "SampleUUID", values_to = "beta" ) %>%
+  dt_pivot_longer(cols = -c(V1, genesUniq), names_to = "Sample_Name", values_to = "beta" ) %>%
   filter(genesUniq != "BRCA1") %>%
-  group_by(SampleUUID, genesUniq ) %>%
+  group_by(Sample_Name, genesUniq ) %>%
   summarise(median_beta = median(beta))  %>%
+  left_join(tcga_ov_sample_mapping ) %>%
+  left_join(fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/processed/TCGA_ABSOLUTE_purity.txt") %>%
+              dplyr::select(Sample.ID= array, purity)) %>%
   dt_pivot_wider(names_from = genesUniq, values_from = median_beta) %>%
-  mutate(BRCA1_group = `BRCA1;NBR2`>=0.75 ) %>%
-  ggplot(aes(x = BRCA1_group, y = `AC103876.1;BNC1`))+
+  filter(purity >= 0.9) %>%
+  ggplot(aes(x = `AC103876.1;BNC1`, y = HRD_Score))+
+  
   # ggplot(aes(x = V1, y = beta, group = SampleUUID))+
-    geom_boxplot()+
+    # geom_boxplot()+
   geom_point()+
-  stat_compare_means()
+  theme_bw()+
+  geom_smooth(method = "lm")+
+  stat_cor()
+
+
+
+
+tcga_ov_beta %>%
+  inner_join(hm27_annot %>%
+               dplyr::select(probeID, genesUniq), by = c("V1"= "probeID")) %>%
+  dt_pivot_longer(cols = -c(V1, genesUniq), names_to = "Sample_Name", values_to = "beta" ) %>%
+  filter(genesUniq != "BRCA1") %>%
+  group_by(Sample_Name, genesUniq ) %>%
+  summarise(median_beta = median(beta))  %>%
+  left_join(tcga_ov_sample_mapping ) %>%
+  left_join(fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/processed/TCGA_ABSOLUTE_purity.txt") %>%
+              dplyr::select(Sample.ID= array, purity)) %>%
+  dt_pivot_wider(names_from = genesUniq, values_from = median_beta) %>%
+  filter(purity > 0.8) %>%
+  mutate(BRCA1_meth_high = `BRCA1;NBR2`>=0.75) %>%
+  ggplot(aes(x= BRCA1_meth_high, y = `AC103876.1;BNC1`, color =BRCA1_meth_high))+
+  geom_jitter()+
+  # ggplot(aes(x = V1, y = beta, group = SampleUUID))+
+    # geom_boxplot()+
+  stat_compare_means()+
+  theme_bw()
+
+
+
+tcga_ov_clinical <- fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/raw/20230711_TCGA_OV_meth/ov_clinical.tsv") %>%
+  mutate(figo_stage = if_else(figo_stage == "'--", NA, figo_stage)) %>%
+  dplyr::select(figo_stage,case_id = case_submitter_id)
+
+
+tcga_ov_beta %>%
+  inner_join(hm27_annot %>%
+               dplyr::select(probeID, genesUniq), by = c("V1"= "probeID")) %>%
+  dt_pivot_longer(cols = -c(V1, genesUniq), names_to = "Sample_Name", values_to = "beta" ) %>%
+  filter(genesUniq != "BRCA1") %>%
+  group_by(Sample_Name, genesUniq ) %>%
+  summarise(median_beta = median(beta))  %>%
+  left_join(tcga_ov_sample_mapping ) %>%
+  left_join(fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/processed/TCGA_ABSOLUTE_purity.txt") %>%
+              dplyr::select(Sample.ID= array, purity)) %>%
+  dt_pivot_wider(names_from = genesUniq, values_from = median_beta) %>%
+  mutate(case_id = substr(Sample.ID, 1, 12)) %>%
+  left_join(tcga_ov_clinical) %>%
+  # filter(purity >= 0.9) %>%
+  # ggplot(aes(y= `AC103876.1;BNC1`, x = `BRCA1;NBR2`))+
+  ggplot(aes(y =`AC103876.1;BNC1`, x = figo_stage))+
+  # ggplot(aes(x =`AC103876.1;BNC1`, y = HRD_Score))+
+    geom_violin()+
+  geom_jitter(alpha = 0.6, size = 0.4)+
+  # geom_point(aes(alpha = purity))+
+  theme_bw()
+
+
+tcga_ov_beta %>%
+  inner_join(hm27_annot %>%
+               dplyr::select(probeID, genesUniq), by = c("V1"= "probeID")) %>%
+  dt_pivot_longer(cols = -c(V1, genesUniq), names_to = "Sample_Name", values_to = "beta" ) %>%
+  filter(genesUniq != "BRCA1") %>%
+  group_by(Sample_Name, genesUniq ) %>%
+  summarise(median_beta = median(beta))  %>%
+  left_join(tcga_ov_sample_mapping ) %>%
+  left_join(fread("/working/lab_olgak/lijunX/HRDmethyl_public/data/processed/TCGA_ABSOLUTE_purity.txt") %>%
+              dplyr::select(Sample.ID= array, purity)) %>%
+  dt_pivot_wider(names_from = genesUniq, values_from = median_beta) %>%
+  mutate(case_id = substr(Sample.ID, 1, 12)) %>%
+  left_join(tcga_ov_clinical) %>%
+  filter(purity > 0.6) %>%
+  ggplot(aes(y= `AC103876.1;BNC1`, x = `BRCA1;NBR2`))+
+  # ggplot(aes(y =`AC103876.1;BNC1`, x = figo_stage))+
+  # ggplot(aes(x =`AC103876.1;BNC1`, y = HRD_Score))+
+    # geom_violin()+
+  # geom_jitter(alpha = 0.6, size = 0.4)+
+  geom_point(aes(alpha = purity))+
+  facet_wrap(~figo_stage )+
+  theme_bw()
+
 
   
 ```
@@ -5579,6 +5777,7 @@ tcga_ov_beta %>%
 #           by = join_by(chrom, CpG_beg <= start, CpG_end >= end))
 # saveRDS(promoter_region, "intermediate/model_methylation.RDS")
 ```
+
 ```{r}
 `CN` =colorRamp2(breaks = c(0, 2, 3), colors = c("#4D7C93", "white", "#CC5C3E"))
 HRD_color <- colorRamp2(breaks = c(0, 0.7, 1), colors = c("#AEB6E5", "white", "#A93154"))
@@ -5678,4 +5877,3 @@ draw(HRD_onco_plot, annotation_legend_side = "bottom", heatmap_legend_side = "bo
 dev.off()
 
 ```
-

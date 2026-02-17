@@ -1,0 +1,15 @@
+#!/bin/bash
+#######################
+#PBS -N pmd_common
+#PBS -l ncpus=1,mem=30gb,walltime=01:00:00
+#PBS -j oe
+#PBS -m ae
+#PBS -r n
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+#######################
+
+set -e
+module load modkit/0.5.0
+modkit stats ${wk_dir}/Me_all/${SampleID}_pileup_5mc_cpg.bed.gz --regions ${wk_dir}/output/MMSeekR/common_pmd_g0.7.bed --mod-codes "m" -o ${wk_dir}/output/MMSeekR/${SampleID}_common_pmd.tsv

@@ -83,7 +83,7 @@ Me_all/*
 Palimpsest/*
 mRNA/*
 clairs_models/
-
+TIGER/*
 #cnvkit output
 *.cns
 *.cnn

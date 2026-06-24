@@ -1,0 +1,169 @@
+---
+title: "methylseekR"
+format: html
+editor: visual
+---
+
+```{r}
+library(data.table)
+library(MethylSeekR)
+library(GenomicRanges)
+library(tidyverse)
+library(BSgenome.Hsapiens.UCSC.hg38)
+setDTthreads(threads = 2)
+set.seed(123)
+```
+
+#Methylation segmentation
+
+```{r}
+
+library(methylKit)
+myobj <- methRead("output/OVCAR8/Me/methyl_call_format.txt", assembly = "hg38", sample.id = "OVCAR8", context = "CpG")
+getMethylationStats(myobj,plot=TRUE,both.strands=FALSE)
+
+my.win=GRanges(seqnames="chr17",
+               ranges=IRanges(start=43025518,
+end = 43168833))
+myobj_chr17 <- selectByOverlap(myobj,my.win)
+res=methSeg(myobj_chr17,diagnostic.plot=TRUE,delta = 0,alpha = 0.05)
+
+res_df<- data.frame(res) %>%
+  filter(seqnames %in% paste0("chr", seq(1,22)))
+
+fine_break <- res_df %>%
+  filter(num.mark >= 1000) %>%
+  dplyr::select(seqnames, start, end) %>%
+  makeGRangesFromDataFrame(.)
+
+fine_obj <- selectByOverlap(myobj, fine_break)
+fine_res = methSeg(fine_obj,diagnostic.plot=TRUE,delta = 0,alpha = 0.05)
+
+fine_res_df<- data.frame(fine_res)
+
+res_df <- rbind(res_df %>%
+  filter(num.mark < 1000) ,
+  fine_res_df
+  )
+
+res_df <- res_df %>%
+  filter(num.mark > 50, seg.mean< 80, seg.mean> 10) %>%
+  arrange(seqnames, start)
+
+res_df_range <- res_df %>%
+  dplyr::select(seqnames, start, end) %>%
+  makeGRangesFromDataFrame(.)
+
+res_df_range <- data.frame(selectByOverlap(myobj, res_df_range ))
+
+
+res_df%>%
+  left_join(res_df_range, by = join_by(seqnames == chr, start <= start, end >= end)) %>%
+  mutate(meth = numCs/coverage) %>%
+  group_by(seqnames, start.x, end.x) %>%
+  filter(var(meth)<=0.05) %>%
+  ungroup() %>%
+  dplyr::select(seqnames,start = start.x, end = end.x, seg.mean) %>%
+  distinct()
+
+data.frame(myobj)
+```
+
+```{r}
+#| echo: false
+library("BSgenome.Hsapiens.UCSC.hg38")
+sLengths=seqlengths(Hsapiens)
+methylome_list <- Sys.glob("output/OVCAR8/Me/*_pileup_tab.bed") %>%
+  map_dfr(~ fread(., select = c(1, 2, 5, 12), header =F)%>%
+            `colnames<-`(c("seqname", "POS", "T", "M")) %>%
+            mutate(Sample = gsub("_pileup_tab.bed", "", basename(.x)),
+                   seqname = factor(seqname, levels= c(paste0("chr", seq(1,22))))) %>%
+            filter(!is.na(seqname)))%>%
+  makeGRangesListFromDataFrame(., keep.extra.columns=T, ignore.strand = T, start.field = "POS", end.field = "POS",names.field = "Sample",split.field = "Sample")
+
+  # snpdb <- fread("/reference/dbsnp/142/All_20151104.vcf", skip = "#CHROM", select= c("#CHROM", "POS")) %>%
+  #   mutate(`#CHROM` = paste0("chr", `#CHROM`))
+  # snpdb_gr <- makeGRangesFromDataFrame(snpdb, ignore.strand = T, seqnames.field = "#CHROM", start.field = "POS", end.field = "POS")
+# clair3 <- fread("output/OVCAR8/clair3/pileup.vcf.gz", skip = "#CHROM") %>%
+#   filter(FILTER == "PASS")
+# clair3_gr <- makeGRangesFromDataFrame(clair3, ignore.strand = T, seqnames.field = "#CHROM", start.field = "POS", end.field = "POS")
+# 
+# ovcar8.gr <- removeSNPs(methylome_list$OVCAR8, clair3_gr)
+# PMDsegment <- segmentPMDs(m = ovcar8.gr, chr.sel = "chr21", seqLengths = sLengths, num.cores = 2, pdfFilename = "plots/ovcar8_pmd_segments_chr22_clair3.pdf")
+# 
+# plotPMDSegmentation(m=ovcar8.gr, segs=PMDsegment,pdfFilename = "plots/OVCAR8_PMD_seg.pdf")
+
+
+PMDsegment <- segmentPMDs(m = methylome_list$OVCAR8, chr.sel = "chr21", seqLengths = sLengths, num.cores = 2, pdfFilename = "plots/ovcar8_pmd_segments_chr22_clair3.pdf", nCGbin = 20)
+
+
+
+
+UMRLMRsegments.gr <- segmentUMRsLMRs(m=methylome_list$OVCAR8, meth.cutoff=0.5,
+nCpG.cutoff=20, PMDs=PMDsegment, num.cores=2,
+myGenomeSeq=Hsapiens, seqLengths=sLengths)
+UMRLMRsegments <-data.frame(UMRLMRsegments.gr)
+
+plotPMDSegmentation(m=methylome_list$OVCAR8, segs=PMDsegment,pdfFilename = "plots/OVCAR8_PMD_seg.pdf")
+
+
+library(rtracklayer)
+session <- browserSession()
+genome(session) <- "hg38"
+query <- ucscTableQuery(session, table = "cpgIslandExt")
+CpGislands.gr <- track(query)
+genome(CpGislands.gr) <- NA
+CpGislands.gr <-suppressWarnings(resize(CpGislands.gr, 5000, fix="center"))
+stats <- calculateFDRs(m=ovcar8.gr, CGIs=CpGislands.gr,PMDs=PMDsegment, num.cores=2, pdfFilename = "plots/ovcar8_FDR_LMR_HMR.pdf")
+
+   
+
+```
+
+```{r}
+meth.gr <- lapply(methylome_list, function(x) removeSNPs(x, snpdb_gr))
+
+sLengths = seqlengths(Hsapiens)
+
+for (i in  c(paste0("chr",seq(1,22)))){
+  segmentPMDs(m = meth.gr$WEHI_CS62, chr.sel= i, seqLengths = sLengths, num.cores = 2, pdfFilename = paste0("plots/","WEHI_CS62_pmd_segments_",i,".pdf"))
+}
+PMDsegments.gr_list <- lapply(meth.gr, function(x) segmentPMDs(m = x, chr.sel= "chr22", seqLengths = sLengths, num.cores = 2, pdfFilename = paste0("plots/", names(x),"_pmd_segments_chr22.pdf")))
+names(PMDsegments.gr_list) <- names(meth.gr)
+
+for (x in names(PMDsegments.gr_list)){
+  print(x)
+  savePMDSegments(PMDs = eval(parse(text = paste0("PMDsegments.gr_list$",x))), GRangesFilename = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/", x, "_PMDs.gr.rds"), TableFilename = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/", x,"_PMDs.gr.tab"))
+}
+
+
+
+PMDsegments.gr_list["OVCAR8"]
+
+lapply(PMDsegments.gr_list, function(x) savePMDSegments(PMDs = x, GRangesFilename = paste0("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/",names(x), "_PMDs.gr.rds"), TableFilename = paste0(names(x),"_PMDs.gr.tab")))
+
+plotPMDSegmentation(m=meth.gr$WEHI_CS62, segs=PMDsegments.gr_list$WEHI_CS62,pdfFilename = "plots/WEHI_CS62_PMD_seg.pdf")
+
+length(PMDsegments.gr_list)
+# methylome <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/EpiRR/ENCFF889UGC.bed.gz") %>%
+#   mutate(M= round(V10 *V11 / 100, 0)) %>%
+#   dplyr::select(seqname = V1, POS = V2, `T` =V5, M) %>%
+#   makeGRangesFromDataFrame(., keep.extra.columns=T, ignore.strand = T, start.field = "POS", end.field = "POS")
+# 
+# 
+# meth.gr <- removeSNPs(methylome, snpdb_gr)
+
+```
+
+```{r}
+sLengths = seqlengths(Hsapiens)
+PMDsegments.gr <- segmentPMDs(m = meth.gr, chr.sel= "chr17", seqLengths = sLengths, num.cores = 1)
+
+savePMDSegments(PMDs = PMDsegments.gr, GRangesFilename = "EpiRR_ovary_PMDs.gr.rds", TableFilename = "EpiRR_ovary_PMDs.gr.tab")
+
+
+
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).

@@ -1,0 +1,34 @@
+#PBS -r n
+#PBS -l mem=150GB,walltime=200:00:00,ncpus=16,ngpus=1
+#PBS -q gpu
+#PBS -m ae
+#PBS -M lijun.xu@qimrberghofer.edu.au
+#PBS -v SampleID
+#PBS -v wk_dir
+
+set -e 
+
+module load samtools/1.17
+
+mkdir -p "${wk_dir}/output_2026/${SampleID}"
+mkdir -p "${wk_dir}/output_2026/${SampleID}/QC"
+
+pod5_files="${wk_dir}/data/${SampleID}/POD5/"
+reference_fa="/reference/genomes/GRCh38_no_alt_analysis_set/primary_files/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+dorado="/working/lab_olgak/lijunX/package/dorado/dorado-1.3.1-linux-x64/bin/dorado"
+
+#model path
+dorado_model="/working/lab_olgak/lijunX/package/dorado/dna_r10.4.1_e8.2_400bps_sup@v5.2.0"
+remora_model="/working/lab_olgak/lijunX/package/dorado/dna_r10.4.1_e8.2_400bps_sup@v5.2.0_5mC_5hmC@v2"
+
+#define output
+bam_output="${wk_dir}/output_2026/${SampleID}/${SampleID}_sup.bam"
+summary_output="${wk_dir}/output_2026/${SampleID}/QC/${SampleID}_summary.tsv"
+
+$dorado basecaller $dorado_model \
+$pod5_files \
+--trim \
+--modified-bases-models $remora_model \
+--recursive --reference $reference_fa > $bam_output
+
+$dorado summary $bam_output > $summary_output

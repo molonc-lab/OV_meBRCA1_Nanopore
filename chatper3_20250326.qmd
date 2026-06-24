@@ -187,34 +187,40 @@ pdx_5hmc <- lr_pdx %>%
 
 ```{r}
 library(edgeR)
-mrna_hom_me_list <- list("134011", "134062", "SFRC01585", "WEHI_CS62", "OVCAR8_LP_A6_30")
+mrna_hom_me_list <- list("134011", "134062", "SFRC01585", "SFRC01334S1","WEHI_CS62", "OVCAR8_LP_A6_30")
 
-mRNA <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/mRNA/Kondrashova_-_HRD_-_RNAseq_Feb_2025.genes.ExpectedCounts.csv") 
+mRNA_batch1 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/mRNA/Kondrashova_-_HRD_-_RNAseq_Feb_2025.genes.ExpectedCounts.csv") 
 
-gene_list <- mRNA %>%
+
+mRNA_batch2 <- fread("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/mRNA/Kondrashova_-_HRD_-_RNAseq_Feb_2026.genes.ExpectedCounts.csv") 
+
+gene_list <- mRNA_batch1 %>%
   dplyr::select( -starts_with("134"), -starts_with("S"), -starts_with("O")) %>%
   mutate(Length = `Gene End (bp)` - `Gene Start (bp)`) %>%
     column_to_rownames("Ensembl Gene ID")
-mRNA_cnts <- mRNA%>%
-  dplyr::select(gene_ID = `Ensembl Gene ID`, starts_with("134")|starts_with("S")|starts_with("O"), -Strand)
+mRNA_cnts <- mRNA_batch1 %>%
+  dplyr::select(gene_ID = `Ensembl Gene ID`, starts_with("134")|starts_with("SF")|starts_with("O")|starts_with("SO")) %>%
+  left_join(mRNA_batch2 %>%
+              dplyr::select(gene_ID = `Ensembl Gene ID`, starts_with("SF") ), by = "gene_ID")
 
 
 mRNA_cnts <- mRNA_cnts %>%
     column_to_rownames(var = "gene_ID")
 
 sample_list <- data.frame(sample = colnames(mRNA_cnts) ) %>%
+    mutate(batch = if_else(sample %in% colnames(mRNA_batch1), "batch1", "batch2")) %>%
   separate(sample, into = c("sample", "drop"), sep = "_", extra = "merge") %>%
   dplyr::select(-drop) %>%
   mutate(sample = gsub("S1|S2", "",sample), 
          BRCA1 = if_else(sample %in% mrna_hom_me_list, "Hom", "Het"))
   
 
-star_matrix <- DGEList(counts = mRNA_cnts, group = factor(sample_list$BRCA1), samples = sample_list, genes = gene_list)
+star_matrix <- DGEList(counts = mRNA_cnts, group = factor(sample_list$BRCA1),batch = factor(sample_list$batch), samples = sample_list, genes = gene_list)
 
 boxplot(cpm(star_matrix, log =T), use.cols = T)     
 
 keep <- filterByExpr(star_matrix)
-design.mat <- model.matrix(~star_matrix$samples$group)
+design.mat <- model.matrix(~star_matrix$samples$group+star_matrix$samples$batch)
 star_matrix <- star_matrix[keep,, keep.lib.sizes=FALSE]
 star_matrix <- calcNormFactors(star_matrix)
 boxplot(cpm(star_matrix, log =T), use.cols = T)    
@@ -228,12 +234,17 @@ fpkm <- t((t(star_matrix$counts) + scaled_prior_count) / adj_lib_size) * 1e6 / s
 tpm <- t(t(fpkm) / colSums(fpkm)) * 1e6
 log_tpm <- log2(tpm)
 
-star_matrix <- estimateDisp(star_matrix, design.mat, robust= T)
-PDX_norm_counts <- cpm(star_matrix, log=TRUE)
+lib_size <- colSums(star_matrix$counts)
 
-
-mRNA_mapping<- data.frame(sample = c( "134011_2058_T3","134048_7496_T2","134062_2233_T3" ,"134169_6606_T2", "SFRC01428S1_22235_T2", "SFRC01495S2_1537_T1", "SFRC01585S1_2163_T3" , "SOLACE20126S1_25285_T2"), alt_name = c("#11", "#48","#62" ,"#169", "#428", "#495", "#585" , "#951"),
-                          meBRCA1 = c("Hom meBRCA1", "Het meBRCA1", "Hom meBRCA1",   "Het meBRCA1", "Het meBRCA1", "Het meBRCA1", "Hom meBRCA1",  "Het meBRCA1"))
+# pdx_cpm <- data.frame(log2(t( t(star_matrix$counts) / lib_size * 1e6 )), check.names = F) %>%
+#   rownames_to_column("ENSG_ID") %>%
+#   left_join(gene_list %>%
+#               dplyr::select(`Associated Gene Name`) %>%
+#               rownames_to_column("ENSG_ID")) %>%
+#   pivot_longer(-c("ENSG_ID", "Associated Gene Name"), names_to = "sample", values_to = "log_tpm")%>%
+#   left_join(mRNA_mapping)
+mRNA_mapping<- data.frame(sample = c( "134011_2058_T3","134048_7496_T2","134062_2233_T3" ,"134169_6606_T2", "SFRC01428S1_22235_T2", "SFRC01495S2_1537_T1.x","SFRC01495S2_1537_T1.y", "SFRC01585S1_2163_T3.x" , "SFRC01585S1_2163_T3.y" , "SFRC01334S1_107_T5", "SOLACE20126S1_25285_T2" ), alt_name = c("#11", "#48","#62" ,"#169", "#428", "#495_1","#495_2", "#585_1" ,"#585_2" , "#334",  "#951"),
+                          meBRCA1 = c("Hom meBRCA1", "Het meBRCA1", "Hom meBRCA1",   "Het meBRCA1", "Het meBRCA1", "Het meBRCA1","Het meBRCA1", "Hom meBRCA1", "Hom meBRCA1", "Hom meBRCA1",  "Het meBRCA1"))
 
 
 pdx_tpm <- data.frame(log_tpm, check.names = F) %>%
@@ -243,6 +254,24 @@ pdx_tpm <- data.frame(log_tpm, check.names = F) %>%
               rownames_to_column("ENSG_ID")) %>%
   pivot_longer(-c("ENSG_ID", "Associated Gene Name"), names_to = "sample", values_to = "log_tpm")%>%
   left_join(mRNA_mapping)
+
+
+
+pdx_sample_selection <- fread("mRNA/Kondrashova_-_HRD_-_RNAseq_Feb_2025_RNASeQC_metrics.tsv") %>%
+  dplyr::select(Sample.Label, `Expression Profiling Efficiency`, `Total Purity Filtered Reads Sequenced`) %>%
+  mutate(batch = "batch1") %>%
+  rbind(fread("mRNA/Kondrashova_-_HRD_-_RNAseq_Feb_2026_RNASeQCv1_metrics.tsv")%>%
+  dplyr::select(Sample.Label = `Sample Label`, `Expression Profiling Efficiency`, `Total Purity Filtered Reads Sequenced`)%>% mutate(batch = "batch2") ) %>%
+  group_by(Sample.Label) %>%
+  filter(n()>1,`Total Purity Filtered Reads Sequenced` == max(`Total Purity Filtered Reads Sequenced`) ) %>%
+  ungroup()%>%
+  mutate(Sample.Label = if_else(batch =="batch1", paste(Sample.Label, "x", sep = "."), paste(Sample.Label, "y", sep = ".")))
+
+pdx_mrna <- pdx_tpm%>%
+  filter( !str_detect(sample, "x|y") |sample %in%pdx_sample_selection$Sample.Label) %>%
+  mutate(alt_name = gsub("_1|_2", "", alt_name),
+    meBRCA1 = factor(meBRCA1, levels = c("Hom meBRCA1", "Het meBRCA1", "Mut BRCA1", "Restored BRCA1")),
+         type = "PDX")
 ```
 
 ###ovcar8 and UWB1 mRNA
@@ -542,6 +571,8 @@ len_plot <- nanopore_len %>%
   sample_n(n()/100) %>%
   mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "PDX")) %>%
   left_join(sample_name_mapping) %>%
+  mutate(alt_name = factor(alt_name,
+  levels =c ("WEHI CS62", "OVCAR8 A6-meth", "OVCAR8", "OVCAR8 H4-KO", "UWB1", "UWB1+BRCA1", "PDX #11",  "PDX #62","PDX #334", "PDX #585", "PDX #169","PDX #48", "PDX #428", "PDX #495",  "PDX #865", "PDX #951"))) %>%
   ggplot(aes(x = sequence_length_template , y= alt_name, fill = sample_type))+
   stat_density_ridges(quantile_lines = TRUE, quantiles = 2)+
   theme_bw()+
@@ -558,6 +589,8 @@ qscore_plot <- qscore %>%
   sample_n(n()/100) %>%
   mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "PDX")) %>%
   left_join(sample_name_mapping) %>%
+  mutate(alt_name = factor(alt_name,
+  levels =c ("WEHI CS62", "OVCAR8 A6-meth", "OVCAR8", "OVCAR8 H4-KO", "UWB1", "UWB1+BRCA1", "PDX #11",  "PDX #62", "PDX #334", "PDX #585", "PDX #169","PDX #48", "PDX #428", "PDX #495",  "PDX #865", "PDX #951"))) %>%
   ggplot(aes(y = mean_qscore_template, x= alt_name, fill = sample_type))+
   geom_boxplot()+
   theme_bw()+
@@ -577,6 +610,8 @@ coverage_plot <-coverage %>%
   ungroup()  %>%
   mutate(sample_type = if_else( sample %in% cell_line, "Cell-line", "PDX")) %>%
   left_join(sample_name_mapping) %>%
+   mutate(alt_name = factor(alt_name,
+  levels =c ("WEHI CS62", "OVCAR8 A6-meth", "OVCAR8", "OVCAR8 H4-KO", "UWB1", "UWB1+BRCA1", "PDX #11",  "PDX #62","PDX #334", "PDX #585", "PDX #169","PDX #48", "PDX #428", "PDX #495",  "PDX #865", "PDX #951"))) %>%
   ggplot(aes(x = alt_name, y = coverage, fill = sample_type))+
   geom_bar(stat = "identity", color = "black")+
   facet_wrap(~sample_type, scale = "free_x", strip.position = "top")+
@@ -2230,9 +2265,9 @@ changed_cpg <- fully_methylated_changes %>%
               dplyr::rename(Sample= sample)) %>%
   mutate(HR = if_else(Sample %in% c(het_me_list, "UWB1_BRCA1"), "HRP", "HRD")) 
 
-saveRDS(changed_cpg, "non_fisher_changed_cpg.RDS")
+saveRDS(changed_cpg, "intermediate/non_fisher_changed_cpg.RDS")
 
-changed_cpg <- readRDS("non_fisher_changed_cpg.RDS")
+changed_cpg <- readRDS("intermediate/non_fisher_changed_cpg.RDS")
 
 changed_cpg_clean <- changed_cpg %>%
   dplyr::select(chrom, chromStart, chromEnd, name) %>%
@@ -2349,8 +2384,6 @@ ggarrange(cell_line_BNC1 ,gg_gene_annotation, nrow = 2, heights = c(0.8, 0.2), c
 ggsave("plots/cell_line_BNC1.pdf", height = 5.5)
 
 ```
-
-#icgc investigation
 
 ```{r}
 icgc_methylation %>%
@@ -2501,13 +2534,13 @@ icgc_methylation_global%>%
   pivot_wider(names_from = "name", values_from = "meth_mean") %>%
   ggplot(aes(x = BRCA1, y =BNC1, group = meBRCA1))+
   geom_point(aes( color = meBRCA1))+
-  facet_wrap(~Sample_Group)+
+  facet_wrap(~Sample_Group, nrow =2)+
   ylab("BNC1 Mean Methylation (beta)")+
   xlab("BRCA1 Mean Methylation (beta)")+
   theme_bw()+
   theme(legend.position = "bottom",
         strip.background = element_rect(fill = "white"))
-ggsave("plots/ICGC_BNC1_methylation_baseline.pdf", width = 7, height = 3)
+ggsave("plots/ICGC_BNC1_methylation_baseline.pdf", width = 3.5, height = 7)
 
 
 icgc_methylation_global%>%
@@ -5422,6 +5455,94 @@ ggsave("plots/inv_app_plot2.pdf", height = 7, width= 4)
 
 ```
 
+### grant plot immunogenicity
+
+#### PDX
+
+```{r}
+meth_zygosity = c("Het meBRCA1"= "#481D24","Hom meBRCA1"= "#368F8B")
+
+# IMMUNE INHIBITOR
+## VISR is C10orf54
+## HAVCR2, CTLA4,CD27,  IDO2, PDCD1LG2 , TIGIT not in counts
+
+# Costimulatory_Mol
+## CD28, CD40LG, ICOS, IL6 ,TNFRSF13B, TNFRSF17 not in counts
+## TNFRSF18, TNFRSF9 dropped due to low expression
+## TMEM173 is STING1
+
+#Chemokines
+## CCL3,CCL4, CXCL9 not in counts
+
+# HLA
+## HLA-DPB2, HLA-DQB2, HLA-DRB6
+
+
+gene_list <- list("Immune_inhibitors" = c("ADORA2A", "VISR", "CD27", "CD274", "CTLA4", "DOK3", "HAVCR2", "IDO1", "IDO2", "LAG3", "PDCD1", "PDCD1LG2", "PDCD2", "TGFB1", "TIGIT", "VTCN1"),
+                  "Costimulatory Mol" = c("CD28", "CD40","CD40LG", "CD86", "ICOS", "ICOSLG", "IL6","IL6R", "STING1", "TNFRSF13B", "TNFRSF17", "TNFRSF18", "TNFRSF4", "TNFRSF9", "TNFSF13", "TNFSF13B","TNFSF18", "TNFSF4", "CCL2"),
+                  "Chemokines"= c("CCL3", "CCL4", "CCL5", "CXCL9", "CXCL10", "CXCL11"),
+                  "HLA" =  c("B2M", "HLA-A", "HLA-B", "HLA-C","HLA-DMA", "HLA-DMB", "HLA-DOA", "HLA-DOB", "HLA-DPA1", "HLA-DPB1", "HLA-DPB2", "HLA-DQA1", "HLA-DQB1", "HLA-DQB2", "HLA-DRA", "HLA-DRB1", "HLA-DRB5", "HLA-DRB6", "TAP1", "TAP2"))
+
+
+mat <- pdx_mrna %>%
+  filter(`Associated Gene Name` %in% unlist(gene_list))  %>%
+  mutate(alt_name = paste0("pdx ", alt_name)) %>%
+  dplyr::select(`Associated Gene Name`, alt_name, log_tpm) %>%
+  pivot_wider(names_from = alt_name, values_from = log_tpm) %>%
+  column_to_rownames("Associated Gene Name")
+
+gene_df <- stack(gene_list) %>%
+  `colnames<-`(c("gene", "group"))  %>%
+  filter(gene %in% rownames(mat)) %>%
+  column_to_rownames("gene")
+
+Heatmap(mat,
+        top_annotation = HeatmapAnnotation(`meBRCA1 Zygosity` =
+                                            pdx_mrna %>%dplyr::select(alt_name, meBRCA1) %>%
+                                             unique(.) %>% pull(meBRCA1),
+        col = list(`meBRCA1 Zygosity`  = meth_zygosity)),
+        left_annotation = rowAnnotation(gene = gene_df[rownames(mat), "group"]),
+          row_split = 4)
+
+```
+
+####ICGC
+
+```{r}
+
+ICGC_tpm<- ICGC_tpm %>%
+  filter( Sample_Group == "Primary tumour") %>%
+  mutate(BRCA1_status = case_when(donorLabel %in% icgc_methylationlist$Sample.ID ~ "meBRCA1",
+                                  donorLabel %in% c("AOCS-092","AOCS-130", "AOCS-086", "AOCS-079", "AOCS-171",
+                                                    "AOCS-152", "AOCS-149", "AOCS-063", "AOCS-122",
+                                                    "AOCS-147", "AOCS-148","AOCS-115") ~ "mutBRCA1",
+                                  TRUE~ "wtBRCA1")) 
+
+mat <-  ICGC_tpm %>%
+  filter(`Associated Gene Name` %in% unlist(gene_list),
+         !ENSG_ID %in% c("ENSG00000250264", "ENSG00000248993"))  %>%
+  group_by(donorLabel) %>%
+  filter(total_counts == max(total_counts)) %>%
+  ungroup() %>%
+  dplyr::select(`Associated Gene Name`, donorLabel, log_tpm) %>%
+  pivot_wider(names_from = donorLabel, values_from = log_tpm) %>%
+  column_to_rownames("Associated Gene Name")
+
+gene_df <- stack(gene_list) %>%
+  `colnames<-`(c("gene", "group"))  %>%
+  filter(gene %in% rownames(mat)) %>%
+  column_to_rownames("gene")
+
+Heatmap(mat,
+        top_annotation = HeatmapAnnotation(`meBRCA1 Zygosity` =
+                                            ICGC_tpm %>%dplyr::select(donorLabel, BRCA1_status) %>%
+                                             unique(.) %>% pull(BRCA1_status)),
+        left_annotation = rowAnnotation(gene = gene_df[rownames(mat), "group"]),
+          row_split = 5, column_split = 2)
+
+ 
+```
+
 #drug efflux
 
 ```{r}
@@ -5538,6 +5659,7 @@ SV <- Sys.glob("/working/lab_olgak/lijunX/OV_meBRCA1_Nanopore/output/*/severus/s
 
 SV %>%
   filter(`#CHROM` == "chr17", POS >= 43125192-50000, POS <= 43125532+50000)
+
 SV%>%
   filter(ID =="r_131_1")
   filter(`#CHROM` == "chr17", POS >= 43000000, POS <=44000000 )
@@ -5876,4 +5998,56 @@ pdf("plots/model_description_Fig1.pdf", height = 5.7, width = 5)
 draw(HRD_onco_plot, annotation_legend_side = "bottom", heatmap_legend_side = "bottom", merge_legend = TRUE)
 dev.off()
 
+```
+
+##NBR2 expression in icgc
+
+```{r}
+library(ggbeeswarm)
+icgc_methylationlist
+
+df <- ICGC_tpm %>%
+  filter(`Associated Gene Name` %in% c("BRCA1", "NBR2"), Sample_Group == "Primary tumour") %>%
+  mutate(BRCA1_status = case_when(donorLabel %in% icgc_methylationlist$Sample.ID ~ "meBRCA1",
+                                  donorLabel %in% c("AOCS-092","AOCS-130", "AOCS-086", "AOCS-079", "AOCS-171",
+                                                    "AOCS-152", "AOCS-149", "AOCS-063", "AOCS-122",
+                                                    "AOCS-147", "AOCS-148","AOCS-115") ~ "mutBRCA1",
+                                  TRUE~ "wtBRCA1")) 
+write.csv(x = df%>%
+  group_by(donorLabel,  Sample_Group, BRCA1_status, `Associated Gene Name`) %>%
+  filter(total_counts == max(total_counts)) %>%
+  ungroup() %>%
+  dplyr::select(donorLabel, Sample_Group, BRCA1_status, `Associated Gene Name`, log_tpm) %>%
+  distinct(), 
+  file = "ICGC_BRCA1_NBR2_tpm.csv")
+
+df%>%
+  mutate(BRCA1_status = if_else(donorLabel %in%c("AOCS-158", "AOCS-057"), "low meBRCA1", BRCA1_status)) %>%
+  group_by(donorLabel,  Sample_Group, BRCA1_status, `Associated Gene Name`) %>%
+  filter(total_counts == max(total_counts)) %>%
+  ungroup() %>%
+  ggplot(aes(x = BRCA1_status, y = log_tpm))+
+  geom_boxplot(outlier.shape = NA)+
+  geom_beeswarm()+
+  facet_wrap(~`Associated Gene Name`)+
+  theme_bw()
+
+
+ggsave("plots/NBR2_expr_brca1_status.pdf", height = 5, width = 7)
+```
+
+```{r}
+pdx_tpm%>%
+  filter(`Associated Gene Name` == "MYO1D")%>%
+  mutate(meBRCA1 = factor(meBRCA1, levels = c("Hom meBRCA1", "Het meBRCA1"))) %>%
+  ggplot(aes(y = log_tpm, x =meBRCA1, color = meBRCA1, label = alt_name))+
+  geom_point()+
+  geom_text_repel(nudge_x = 0.4,segment.color = 'grey50')+
+  scale_colour_manual(values = sample_palette)+
+  theme_bw()+
+  theme(axis.title.x = element_blank(),
+        
+        legend.position = "bottom")+
+  ylab("NBR2 Expression (log(TPM))")+
+  stat_compare_means()
 ```

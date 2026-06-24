@@ -34,5 +34,6 @@ rm ${me_pileup}.bed
 
 
 
+modkit extract $bam_mapped ${me_pileup}_${type}_brca1.tsv --threads 24 --filter-threshold C:0.7 --filter-threshold A:0.8 --reference $reference_fa --region chr17:43113041-43137714
 
 

@@ -214,7 +214,7 @@ CpG_DEL_fisher <- plot_DEL  %>%
   mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
   mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
   group_by(ID) %>%
-  mutate(fisher.adj = p.adjust(p.value),
+  mutate(fisher.adj = p.adjust(p.value,method = "BH"),
          sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
   ungroup()  
 
@@ -248,13 +248,13 @@ plot_DEL_density%>%
   geom_point(alpha= 0.8,aes(shape = sig))+
   theme_bw()+
   scale_color_viridis_c( name = "density")+
-  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig change")+
   scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
   xlab("Relative distance to breakpoint (bp)")+
   ggtitle("DEL (SV)")+
   coord_cartesian(xlim= c(-5000, 5000))
 
-ggsave("plots/DEL_change.png", width = 8, height = 4,)
+ggsave("plots/DEL_change.jpeg", width = 8, height = 4)
 unique(plot_DEL_density$ID)
 
 
@@ -635,7 +635,7 @@ CpG_INS_fisher <- plot_INS  %>%
   mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
   mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
   group_by(ID) %>%
-  mutate(fisher.adj = p.adjust(p.value),
+  mutate(fisher.adj = p.adjust(p.value,method = "BH"),
          sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
   ungroup()  
 
@@ -663,13 +663,13 @@ plot_INS_density%>%
   geom_point(alpha= 0.8)+
   theme_bw()+
   scale_color_viridis_c( name = "density")+
-  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19),  "Sig change")+
   scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
   xlab("Relative distance to breakpoint (bp)")+
   ggtitle("INS (SV)")+
   coord_cartesian(xlim= c(-5000, 5000))
 
-ggsave("plots/INS_change.png", width = 8, height = 4)
+ggsave("plots/INS_change.jpeg", width = 8, height = 4)
 unique(plot_INS_density$ID)
 
 
@@ -1002,7 +1002,7 @@ CpG_DUP_fisher <- plot_DUP  %>%
   mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
   mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
   group_by(ID) %>%
-  mutate(fisher.adj = p.adjust(p.value),
+  mutate(fisher.adj = p.adjust(p.value,method = "BH"),
          sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
   ungroup()  
 
@@ -1032,14 +1032,14 @@ plot_DUP_density%>%
   geom_point(alpha= 0.8,aes(shape = sig))+
   theme_bw()+
   scale_color_viridis_c( name = "density")+
-  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19),  "Sig change")+
   scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
   xlab("Relative distance to breakpoint (bp)")+
   ggtitle("DUP (SV)")+
   coord_cartesian(xlim= c(-5000, 10000))+
   scale_x_continuous(breaks = c(-5000, -2500, 0, 5000, 7500, 10000), labels = c("-5000", "-2500", "BP_1", "BP_2", "2500", "5000"))
 
-ggsave("plots/DUP_change.png", width = 8, height = 4,)
+ggsave("plots/DUP_change.jpeg", width = 8, height = 4,)
 unique(plot_DEL_density$ID)
 
 
@@ -1284,7 +1284,7 @@ CpG_BND_fisher <- plot_BND  %>%
   mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
   mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
   group_by(ID) %>%
-  mutate(fisher.adj = p.adjust(p.value),
+  mutate(fisher.adj = p.adjust(p.value,method = "BH"),
          sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
   ungroup()  
 
@@ -1312,13 +1312,13 @@ plot_BND_density%>%
   geom_point(alpha= 0.8,aes(shape = sig))+
   theme_bw()+
   scale_color_viridis_c( name = "density")+
-  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19),  "Sig change")+
   scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
   xlab("Relative distance to breakpoint (bp)")+
-  ggtitle("BND (SV)")+
+  ggtitle("Translocation (SV)")+
   coord_cartesian(xlim= c(0, 5000))
 
-ggsave("plots/BND_change.png", width = 8, height = 4)
+ggsave("plots/BND_change.jpeg", width = 8, height = 4)
 unique(plot_BND_density$ID)
 
 
@@ -1331,7 +1331,7 @@ plot_BND_density%>%
   theme(legend.position = "bottom")+
   scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
   xlab("Relative distance to breakpoint (bp)")+
-  ggtitle("BND (SV)")+
+  ggtitle("Translocation (SV)")+
   coord_cartesian(xlim= c(-5000, 5000))+
    scale_color_manual(values = c( "red","black"), "Sig diff & abs(diff) >= 0.8")+
   facet_wrap(~ID)
@@ -1785,9 +1785,6 @@ isogenic_overlap_indels_venn(indel_del_h453 ,
                      indel_del_a630 , type = "DEL", "plots/indel_del_overlap_ovcar8s.tiff")
 ```
 
-
-
-
 ####indel DEL merge
 
 ```{r}
@@ -1863,7 +1860,7 @@ CpG_indel_del_fisher <- plot_indel_del  %>%
   mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
   mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
   group_by(ID) %>%
-  mutate(fisher.adj = p.adjust(p.value),
+  mutate(fisher.adj = p.adjust(p.value,method = "BH"),
          sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
   ungroup()  
 
@@ -1901,13 +1898,13 @@ plot_indel_del_density%>%
   geom_point(alpha= 0.8,aes(shape = sig))+
   theme_bw()+
   scale_color_viridis_c( name = "density")+
-  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19),  "Sig change")+
   scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
   xlab("Relative distance to breakpoint (bp)")+
   ggtitle("DEL (INDEL)")+
   coord_cartesian(xlim= c(-5000, 5000))
 
-ggsave("plots/indel_del_change.png", width = 8, height = 4)
+ggsave("plots/indel_del_change.jpeg", width = 8, height = 4)
 ```
 
 ### INDEL INS
@@ -2020,7 +2017,7 @@ CpG_indel_ins_fisher <- plot_indel_ins  %>%
   mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
   mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
   group_by(ID) %>%
-  mutate(fisher.adj = p.adjust(p.value),
+  mutate(fisher.adj = p.adjust(p.value,method = "BH"),
          sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
   ungroup()  
 
@@ -2047,13 +2044,13 @@ plot_indel_ins_density%>%
   geom_point(alpha= 0.8,aes(shape = sig))+
   theme_bw()+
   scale_color_viridis_c( name = "density")+
-  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig diff & abs(diff) >= 0.8")+
+  scale_shape_manual(values = c("FALSE"= 4, "TRUE" = 19), "Sig change")+
   scale_y_continuous(labels = scales::percent, "ALT - REF (%5mC)")+
   xlab("Relative distance to breakpoint (bp)")+
   ggtitle("INS (INDEL)")+
   coord_cartesian(xlim= c(-5000, 5000))
 
-ggsave("plots/indel_ins_change.png", width = 8, height = 4)
+ggsave("plots/indel_ins_change.jpeg", width = 8, height = 4)
 ```
 
 #altered SV investigation
@@ -2400,7 +2397,7 @@ indel_len_plot <- del_len %>%
 
 ggarrange(indel_len_plot,
           SV_len_plot,
-          nrow =1, common.legend = T, legend = "bottom")
+          nrow =1, common.legend = T, legend = "bottom", labels = c("Small DEL", "SV DEL"))
 ggsave("plots/breakdown_Deletion_length.pdf", width = 11, height =4)
 
 ##insertion
@@ -2457,7 +2454,7 @@ SV_len_plot <- del_len %>%
         axis.text.x = element_text(angle = 30 , vjust = 0.5))
 ggarrange(indel_len_plot,
           SV_len_plot,
-          ncol =2, common.legend = T, legend = "bottom")
+          ncol =2, common.legend = T, legend = "bottom", labels = c("Small INS", "SV INS"))
 ggsave("plots/breakdown_Insertion_length.pdf", width = 11, height =4)
 
 
@@ -2533,8 +2530,9 @@ ggsave("plots/breakdown_Duplication_length.pdf", width = 6, height =5
 # ggsave("plots/logisticreg_changed_size.pdf", height = 4, width = 10)
 
 del_len %>%
-  filter(Group == "Deletion", type == "INDEL")  %>%
-  group_by(starting, changed) %>%
+  mutate(changed_T_F = changed != "No Change") %>%
+  filter(Group == "Deletion")  %>%
+  group_by(type, changed_T_F) %>%
   summarise(alt_len = median(alt_len))
 
 ```
@@ -3640,13 +3638,28 @@ O_matrix <- deleted_microhom %>%
   mutate(n = n_distinct(ID)) %>%
   group_map(~ get_match_matrix(.x$three_prime_flank, .x$five_prime_flank))  %>%
   Reduce('+', .)
+nochange_mat <- O_matrix_no/max(O_matrix_no)
+rownames(nochange_mat) <-c(seq(-8,-1), seq(1,8))
+colnames(nochange_mat) <-c(seq(-8,-1), seq(1,8))
+rownames(nochange_mat) <- as.character(rownames(nochange_mat))
+colnames(nochange_mat) <- as.character(colnames(nochange_mat))
 
+change_mat <- O_matrix/max(O_matrix)
+rownames(change_mat) <-c(seq(-8,-1), seq(1,8))
+colnames(change_mat) <-c(seq(-8,-1), seq(1,8))
+rownames(change_mat) <- as.character(rownames(change_mat))
+colnames(change_mat) <- as.character(colnames(change_mat))
 
 library(circlize)
 col_fun = colorRamp2(c(0, 0.5, 1), c("#0466c8", "white", "#bf0603"))
+pdf("plots/microhom_ov_sig_change.pdf")
+ComplexHeatmap::Heatmap( change_mat,cluster_rows = F, cluster_columns = F,col = col_fun, column_title = "Microhomolgy around breakends with significant methylation change", )
+dev.off()
 
-ComplexHeatmap::Heatmap(O_matrix_no/max(O_matrix_no) ,cluster_rows = F, cluster_columns = F,col = col_fun)
-ComplexHeatmap::Heatmap(O_matrix/max(O_matrix) ,cluster_rows = F, cluster_columns = F,col = col_fun)
+pdf("plots/microhom_ov_insig_change.pdf")
+ComplexHeatmap::Heatmap(nochange_mat ,cluster_rows = F, cluster_columns = F,col = col_fun,  column_title = "Microhomolgy around breakends without methylation change")
+dev.off()
+
 ComplexHeatmap::Heatmap(UWB1_matrix/max(UWB1_matrix) ,cluster_rows = F, cluster_columns = F,col = col_fun)
 
 # ComplexHeatmap::Heatmap(UWB1_matrix/3 ,cluster_rows = F, cluster_columns = F,col = col_fun)
@@ -3669,12 +3682,52 @@ deleted_microhom <- cbind(merged_DEL_simp, tibble(five_prime_flank = as.characte
                           !twobase_microhomology &alt_len >=4 ~ "non-MH Deletion",
                           alt_len <4 ~ "NHEJ (del <4bp)"))
 
+
+library(rstatix)
+library(glue)
+df <- deleted_microhom %>%
+  filter(alt_len >= 4) %>%
+  mutate(threebase = five_prime_flank == three_prime_flank)
+
+chisq_res <- df %>%
+  group_by(Sample, changed, type) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  ungroup() %>%
+  group_by(Sample) %>%
+  # reshape to a matrix (rows: changed, cols: type)
+  summarise(test = list(chisq.test(
+    xtabs(n ~ changed + type, data = cur_data_all())
+  )), .groups = "drop") %>%
+  mutate(tidy = map(test, broom::tidy)) %>%
+  tidyr::unnest(tidy) %>%
+  select(Sample, statistic, parameter, p.value, method) %>%
+  mutate(y = 106,label = glue("chi^2=={round(statistic, 2)}~~(p==\"{format.pval(p.value, digits = 2)}\")"),
+    x = -Inf
+  )
+
+
+ggplot(df, aes(x = changed)) +
+  geom_bar(color = "black", aes(fill = type)) +
+  facet_wrap(~ Sample) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  geom_text(
+    data = chisq_res ,
+    aes(x = x, y = y, label = label),
+    hjust = -0.02, vjust = 0, parse = TRUE, size = 4
+  ) +
+  coord_cartesian(clip = "off") +
+  theme(plot.margin = margin(10, 30, 10, 30))
+ggsave("plots/repair_ways.pdf",height = 4, width = 7)
+
+
 deleted_microhom %>%
   filter(alt_len >=4) %>%
   mutate(threebase = five_prime_flank== three_prime_flank) %>%
   ggplot(aes(x = changed, fill = type)) +
-  geom_bar(stat = "count")+
+  geom_bar(stat = "count", color = "black")+
   facet_wrap(~Sample)+
+   theme_bw()+
   theme(legend.position = "bottom")
 ```
 
@@ -3836,7 +3889,7 @@ PDX_DEL_fisher <-pdx_del_meth   %>%
   mutate(p.value =fisher.test(x = matrix(c(Meth_alt, Meth_ref, Unmeth_alt, Unmeth_ref),byrow = T, nrow = 2))$p.value ) %>%
   mutate(diff = Meth_alt/(Meth_alt+Unmeth_alt) -  Meth_ref/(Meth_ref+Unmeth_ref)) %>%
   group_by(ID) %>%
-  mutate(fisher.adj = p.adjust(p.value),
+  mutate(fisher.adj = p.adjust(p.value,method = "BH"),
          sig = (fisher.adj <= 0.05 & abs(diff) >= 0.8 )) %>%
   ungroup()  
 

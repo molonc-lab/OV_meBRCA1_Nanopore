@@ -703,3 +703,158 @@ keep_bigger_overlaps <- function(gr1, gr2) {
   # Combine and return
   c(gr1_keep, gr2_keep)
 }
+
+library(ggforce)
+library(GenomicAlignments)
+library(Rsamtools)
+
+get_coverage <- function(bam_file, chrom, center_pos, window = 300) {
+  region <- GRanges(chrom, IRanges(center_pos - window, center_pos + window))
+  param  <- ScanBamParam(which = region)
+  
+  pile <- pileup(
+    bam_file,
+    scanBamParam = param,
+    pileupParam = PileupParam(distinguish_strands = FALSE)
+  )
+  
+  full_range <- tibble(pos = seq(center_pos - window, center_pos + window))
+  
+  pile_summary <- pile %>%
+    group_by(pos) %>%
+    summarise(depth = sum(count), .groups = "drop")
+  
+  full_range %>%
+    left_join(pile_summary, by = "pos") %>%
+    mutate(depth = replace_na(depth, 0),
+           chrom = chrom)
+}
+
+count_split_reads_longread <- function(bam_file, chrom1, pos1, chrom2, pos2,
+                                       window = 1000) {
+  
+  # helper: get primary alignments in a region, return qnames whose
+  # SA tag points to the OTHER locus
+  find_supporting_reads <- function(query_chrom, query_pos, other_chrom, other_pos) {
+    region <- GRanges(query_chrom, IRanges(query_pos - window, query_pos + window))
+    param  <- ScanBamParam(
+      which = region,
+      what  = c("qname", "flag", "pos"),
+      tag   = "SA",
+      flag  = scanBamFlag(isSupplementaryAlignment = FALSE)  # primary only
+    )
+    
+    aln <- readGAlignments(bam_file, param = param)
+    qnames  <- mcols(aln)$qname
+    sa_tags <- mcols(aln)$SA
+    has_sa  <- !is.na(sa_tags) & sa_tags != ""
+    
+    matches <- map_lgl(sa_tags[has_sa], function(sa) {
+      entries <- str_split(sa, ";")[[1]]
+      entries <- entries[entries != ""]
+      any(map_lgl(entries, function(e) {
+        fields   <- str_split(e, ",")[[1]]
+        sa_chrom <- fields[1]
+        sa_pos   <- as.numeric(fields[2])
+        sa_chrom == other_chrom && abs(sa_pos - other_pos) <= window
+      }))
+    })
+    
+    qnames[has_sa][matches]
+  }
+  
+  # query from both directions
+  reads_from_bp1 <- find_supporting_reads(chrom1, pos1, chrom2, pos2)
+  reads_from_bp2 <- find_supporting_reads(chrom2, pos2, chrom1, pos1)
+  
+  # union + dedupe by read name — a read is one piece of evidence
+  # regardless of which side its primary landed on
+  supporting_reads <- union(reads_from_bp1, reads_from_bp2)
+  
+  length(supporting_reads)
+}
+
+plot_coverage_panel <- function(cov, bp_pos, label, side = c("left", "right")) {
+  side <- match.arg(side)
+  cov <- cov %>% mutate(across_bp = if (side == "left") pos < bp_pos else pos >= bp_pos)
+  
+  ggplot(cov, aes(x = pos, y = depth, fill = across_bp)) +
+    geom_col(width = 1, show.legend = FALSE) +
+    geom_vline(xintercept = bp_pos, colour = "#3C3489", linetype = "dashed", linewidth = 0.5) +
+    scale_fill_manual(values = c(`TRUE` = "#5DCAA5", `FALSE` = "#85B7EB")) +
+    annotate("text", x = bp_pos, y = -max(cov$depth) * 0.08, label = label,
+             size = 3.2, colour = "grey30", vjust = 1) +
+    labs(x = NULL, y = "depth") +
+    coord_cartesian(clip = "off") +
+    theme_minimal(base_size = 11) +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_blank(),
+          plot.margin = margin(5, 10, 20, 10))
+}
+
+gap_info_if_overlap <- function(seq, param_start, roi_start, roi_end) {
+  if (is.na(seq)) {
+    return(list(
+      gap_len = NA_integer_,
+      gap_start = NA_character_,
+      gap_end = NA_character_
+    ))
+  }
+  
+  m <- gregexpr("-+", seq)[[1]]
+  if (m[1] == -1) {
+    return(list(
+      gap_len = 0L,
+      gap_start = NA_character_,
+      gap_end = NA_character_
+    ))
+  }
+  
+  gap_starts  <- m
+  gap_lengths <- attr(m, "match.length")
+  
+  # Convert to genomic coordinates
+  g_start <- param_start + gap_starts - 1
+  g_end   <- g_start + gap_lengths - 1
+  
+  # Overlap test
+  overlaps <- g_start <= roi_end & g_end >= roi_start
+  
+  if (!any(overlaps)) {
+    return(list(
+      gap_len = 0L,
+      gap_start = NA_character_,
+      gap_end = NA_character_
+    ))
+  }
+  
+  list(
+    gap_len   = sum(gap_lengths[overlaps]),  # full length(s)
+    gap_start = paste(g_start[overlaps], collapse = ";"),
+    gap_end   = paste(g_end[overlaps], collapse = ";")
+  )
+}
+
+plot_track_bedgraph <- function(SampleID, bw_file){
+  track <- DataTrack(
+    range = bw_file,
+    start= roi_start,
+    end = roi_end,
+    width = 10,
+    format = "bigWig",
+    genome = "hg38",
+    chromosome = roi_chr,
+    type = "h",   # or "l" for line
+    name = SampleID,
+    col = "darkblue",
+    fill = "darkblue"
+  )
+  
+  displayPars(track) <- list(
+    col = "darkblue",
+    fill = "darkblue"
+  )
+  
+  return(track)
+  
+}

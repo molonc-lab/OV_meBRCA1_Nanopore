@@ -640,7 +640,7 @@ ggsave(plot = merged_plot, filename = "plots/nanopore_cell_line_qc.pdf",  width 
 methylation_array <- fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/output/batch2_beta_post_filt.tsv") %>%
   dplyr::select(CpG, OVCAR8_LP_A6_30 = OVCAR8.A6.meth_DMSO, WEHI_CS62 = `62_DMSO2`) %>%
   left_join(fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/output/batch1_beta_post_filt.tsv") %>%
-              dplyr::select(CpG, OVCAR8= OVCAR8_DMSO))
+              dplyr::select(CpG, OVCAR8= OVCAR8_DMSO))c
 array_annotation <- fread("/working/lab_olgak/lijunX/GSK_treated_OvCa/supporting/EPIC-8v2-0_A1.csv", header =T, skip ="IlmnID")
 
 methylation_array <- methylation_array %>%

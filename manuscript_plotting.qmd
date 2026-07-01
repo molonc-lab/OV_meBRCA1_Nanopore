@@ -141,7 +141,7 @@ annotation_edp <- fread("ref/EDPnew_20240409.bed") %>%
 #   filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22)))
 # saveRDS(cell_line_5mc, "intermediate/cell_line_5mc.RDS")
 # 
-# pdx_5mc <- paste0("Me_all/",PDX, "_pileup_5mc_cpg.bed.gz")%>%
+# pdx_5mc <- paste0("Me_",PDX, "_pileup_5mc_cpg.bed.gz")%>%
 #   map_dfr(~fread(.x, select = c(1,2,3,4,5,11,12, 14), col.names = c("chrom", "start", "end", "mod_type", "Nvalid_cov","fraction_mod", "Nmod", "Nother_mod"), showProgress = T)%>%
 #              mutate(Sample = gsub("_pileup_5mc_cpg.bed.gz", "", basename(.x)))) %>%
 #   filter(mod_type == 'm', Nvalid_cov >= 5,Nvalid_cov <= 100, chrom %in% paste0("chr", seq(1,22)))
@@ -828,7 +828,7 @@ run this under R/4.3.1, 4.5.0 have package version conflicting that cannot be re
 ```{r}
 library(Gviz)
 
-BRCA1_Genemodels <- fread("../reference_GRCh38/gencode.v41.annotation_Original.gtf.gz", skip= "chr1", header  =F) %>%
+BRCA1_Genemodels <- fread("ref/gencode.v41.annotation_Original.gtf.gz", skip= "chr1", header  =F) %>%
   filter(V1 == "chr17", V4 >= 43044295, V5 <=43125364, 
          str_detect(V9, "MANE")) %>%
   mutate(width = abs(V5-V4+1),

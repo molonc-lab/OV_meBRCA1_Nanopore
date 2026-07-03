@@ -1198,29 +1198,44 @@ dev.off()
 
 ## Panel B
 ```{r}
-# BND_reads_file <- Sys.glob("output/*/*_DEL_meth.RDS")
-# BND_reads_file <- DEL_reads_file[!str_detect(DEL_reads_file, "UWB|OVCAR")]
-# BND_reads <- DEL_reads_file %>%
+# alt_BND_reads <- Sys.glob("output/*/*_BND_alt_meth.RDS") %>%
 #   map_dfr( ~ readRDS(.x) %>%
-#              mutate(SampleID= gsub("_DEL_meth.RDS", "", basename(.x))) %>%
-#   mutate(mod = case_when(mod_qual >= 0.6 ~ 1,
-#                          mod_qual <= 0.4 ~ 0,
+#              mutate(SampleID= gsub("_BND_alt_meth.RDS", "", basename(.x)),
+#                     mod = case_when(mod_qual >= 0.65 ~ 1,
+#                          mod_qual <= 0.3 ~ 0,
 #                          T ~ NA)) %>%
-#   filter(base_qual >=20, !is.na(mod),  ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
-#   group_by(ID, read_type) %>%
-#   filter(n()>2) %>%
-#   ungroup() %>%
-#   group_by(ID, read_type) %>%
-#   filter(n_distinct(read_id)>2) %>%
-#   ungroup() %>%
-#   group_by(ID) %>%
-#   filter(n_distinct(read_type)== 2) %>%
-#   ungroup())
-# saveRDS(DEL_reads, "output/total_del_meth.RDS")
+#               filter(base_qual >=20, abs(ref_position- SV_start) <= 2000, !is.na(mod)) %>%
+#              group_by(ID, ref_position) %>%
+#              filter(n()>=1) %>%
+#              ungroup() %>%
+#              group_by(read_id) %>%
+#              filter(n()>3) %>%
+#              ungroup())
+# 
+# ref_BND_reads <- Sys.glob("output/*/*_BND_ref_meth.RDS") %>%
+#   map_dfr( ~ readRDS(.x) %>%
+#              mutate(SampleID= gsub("_BND_ref_meth.RDS", "", basename(.x)),
+#                     mod = case_when(mod_qual >= 0.65 ~ 1,
+#                          mod_qual <= 0.3 ~ 0,
+#                          T ~ NA)) %>%
+#               filter(base_qual >=20, abs(ref_position- SV_start) <= 2000, !is.na(mod), ID %in% unique(alt_BND_reads$ID)))
+#   
+#   
+# BND_reads <- rbind(ref_BND_reads, alt_BND_reads ) %>%
+#   group_by(SampleID, ID) %>%
+#   filter(n_distinct(read_type)== 2)%>%
+#   mutate(random_ref_pos=  SV_start[1]) %>%
+#   mutate(relative_position = ref_position- SV_start,
+#          relative_position = case_when(random_ref_pos != SV_start & relative_position < 0 ~ relative_position,
+#                                        random_ref_pos != SV_start & relative_position > 0 ~ -relative_position,
+#                                        random_ref_pos == SV_start & relative_position > 0 ~ relative_position,
+#                                        random_ref_pos == SV_start & relative_position < 0 ~ -relative_position))
+# 
+# saveRDS(BND_reads, "output/total_bnd_meth.RDS")
 ```
 
 ```{r}
-BND_reads <- Sys.glob("output/*/*_BND_meth.RDS")
+BND_reads <-readRDS("output/total_bnd_meth.RDS")
 
 
 REF <-BND_reads %>%

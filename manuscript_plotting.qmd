@@ -206,13 +206,6 @@ log_tpm <- log2(tpm)
 
 lib_size <- colSums(star_matrix$counts)
 
-# pdx_cpm <- data.frame(log2(t( t(star_matrix$counts) / lib_size * 1e6 )), check.names = F) %>%
-#   rownames_to_column("ENSG_ID") %>%
-#   left_join(gene_list %>%
-#               dplyr::select(`Associated Gene Name`) %>%
-#               rownames_to_column("ENSG_ID")) %>%
-#   pivot_longer(-c("ENSG_ID", "Associated Gene Name"), names_to = "sample", values_to = "log_tpm")%>%
-#   left_join(mRNA_mapping)
 mRNA_mapping<- data.frame(sample = c( "134011_2058_T3","134048_7496_T2","134062_2233_T3" ,"134169_6606_T2", "SFRC01428S1_22235_T2", "SFRC01495S2_1537_T1.x","SFRC01495S2_1537_T1.y", "SFRC01585S1_2163_T3.x" , "SFRC01585S1_2163_T3.y" , "SFRC01334S1_107_T5", "SOLACE20126S1_25285_T2" ), alt_name = c("#11", "#48","#62" ,"#169", "#428", "#495_1","#495_2", "#585_1" ,"#585_2" , "#334",  "#951"),
                           meBRCA1 = c("Hom meBRCA1", "Het meBRCA1", "Hom meBRCA1",   "Het meBRCA1", "Het meBRCA1", "Het meBRCA1","Het meBRCA1", "Hom meBRCA1", "Hom meBRCA1", "Hom meBRCA1",  "Het meBRCA1"))
 
@@ -244,7 +237,7 @@ pdx_mrna <- pdx_tpm%>%
          type = "PDX")
 ```
 
-####UWB1
+#### UWB1
 
 ```{r}
 mRNA_UWB1 <- fread("/mnt/lustre/working/genomeinfo/share/analysis/Kondrashova_-_HRD_-_RNAseq/RNAseq_Nov_2024/Kondrashova_-_HRD_-_RNAseq_Nov_2024.genes.ExpectedCounts.csv") 
@@ -293,7 +286,7 @@ uwb1_tpm <- data.frame(log_tpm, check.names = F) %>%
   mutate(alt_name = if_else(str_detect(sample, "BRCA1"), "UWB1+BRCA1", "UWB1"))
 ```
 
-####OVCAR8
+#### OVCAR8
 
 ```{r}
 mRNA_OVCAR8 <- fread("/mnt/lustre/working/genomeinfo/share/analysis/Kondrashova_-_HRD_-_RNAseq/RNA-Seq_June2024/Kondrashova_-_HRD_-_RNAseq.genes.ExpectedCounts.csv") 
@@ -435,10 +428,10 @@ ICGC_tpm <- ICGC_tpm  %>%
 
 ```
 
-#Figure 1
+# Figure 1
 
 ```{r}
-##subset for TCGA explored probes
+##subset for TCGA explored probes will take long
 # promoter_hypermethylation_probes <- fread("../HRDmethyl_public/plots/rebuttal/CpG_probes_annotation.tsv") %>%
 #   filter(INCLUDE_ext) %>%
 #   group_by(Gene, CpG_chrm) %>%
@@ -454,7 +447,7 @@ ICGC_tpm <- ICGC_tpm  %>%
 # saveRDS(promoter_region, "intermediate/model_methylation.RDS")
 ```
 
-##Panel B
+## Panel B
 
 ```{r}
 `CN` =c("1" ="#A6BBC8", "2"= "white", "3"= "#F2BBAB", "4" = "#CC5C3D")
@@ -1071,7 +1064,6 @@ ggsave("plots/supporting_reads_sv_585.pdf", width = 8, height = 3)
 
 # Figure 3
 
-##global bnc1
 
 ```{r}
 changed_cpg <- readRDS("intermediate/non_fisher_changed_cpg.RDS")
@@ -1205,9 +1197,30 @@ dev.off()
 ```
 
 ## Panel B
+```{r}
+# BND_reads_file <- Sys.glob("output/*/*_DEL_meth.RDS")
+# BND_reads_file <- DEL_reads_file[!str_detect(DEL_reads_file, "UWB|OVCAR")]
+# BND_reads <- DEL_reads_file %>%
+#   map_dfr( ~ readRDS(.x) %>%
+#              mutate(SampleID= gsub("_DEL_meth.RDS", "", basename(.x))) %>%
+#   mutate(mod = case_when(mod_qual >= 0.6 ~ 1,
+#                          mod_qual <= 0.4 ~ 0,
+#                          T ~ NA)) %>%
+#   filter(base_qual >=20, !is.na(mod),  ref_position != -1, (abs(ref_position -SV_start )<= 2000 | abs(ref_position -SV_end )<= 2000)) %>%
+#   group_by(ID, read_type) %>%
+#   filter(n()>2) %>%
+#   ungroup() %>%
+#   group_by(ID, read_type) %>%
+#   filter(n_distinct(read_id)>2) %>%
+#   ungroup() %>%
+#   group_by(ID) %>%
+#   filter(n_distinct(read_type)== 2) %>%
+#   ungroup())
+# saveRDS(DEL_reads, "output/total_del_meth.RDS")
+```
 
 ```{r}
-BND_reads <- readRDS("output/total_bnd_meth.RDS")
+BND_reads <- Sys.glob("output/*/*_BND_meth.RDS")
 
 
 REF <-BND_reads %>%
@@ -4920,6 +4933,7 @@ ICGC_tpm %>%
    ylab("GATAD2B (logTPM)")
 
 ```
+
 ```{r}
 icgc_methylation_global%>%
    mutate(Donor = gsub("_", "-", Donor)) %>%
@@ -4987,6 +5001,7 @@ drug_ctg %>%
 ggsave("plots/ctg_lum_olaparib_selection.pdf", height = 7, width = 6)
 
 ```
+
 #running of PMD
 
 ```{r}

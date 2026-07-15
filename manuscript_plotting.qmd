@@ -1028,7 +1028,7 @@ ggarrange(BRCA1_annotation_gg,MYO1D_annotation_gg, widths = c(abs(min(BRCA1_anno
 
 ggsave("plots/sv_585.pdf", width = 10, height =2)
 
-bam_file <- "/working/lab_olgak/lijunX/20260330_ONT_Multiplex_DNA/output_2026/HCC38_585/SFRC01585S1_2163_T3_multiplex_mapped_sc.bam"
+bam_file <- "/working/lab_olgak/lijunX/20260330_ONT_Multiplex_DNA/output/HCC38_585/SFRC01585S1_2163_T3_multiplex_mapped_sc.bam"
 
 
 bp1 <- list(chrom = "chr17", pos = 43139935,  window = 5000)
@@ -1063,7 +1063,6 @@ ggsave("plots/supporting_reads_sv_585.pdf", width = 8, height = 3)
 ```
 
 # Figure 3
-
 
 ```{r}
 changed_cpg <- readRDS("intermediate/non_fisher_changed_cpg.RDS")
@@ -1197,6 +1196,7 @@ dev.off()
 ```
 
 ## Panel B
+
 ```{r}
 # alt_BND_reads <- Sys.glob("output/*/*_BND_alt_meth.RDS") %>%
 #   map_dfr( ~ readRDS(.x) %>%
@@ -1733,38 +1733,33 @@ write.csv(x =  plot_BND_density%>%
 
 ```{r}
 
-crispr_guide1 <- fread("../20260330_ONT_Multiplex_DNA/Me_all/OVCAR8_A630_CRISPR1_IC80_5mc_brca1.tsv") %>%
-  filter(mod_code == "m",
-         ref_position >=43125192-3000, ref_position <=43125532+3000)
+crispr_guide1 <- fread("../20260330_ONT_Multiplex_DNA/Me_all/OVCAR8_A630_CRISPR1_IC80_pileup_5mc_brca1.tsv") %>%
+  filter(mod_code == "m", 
+         ref_position >=43125192-3000, ref_position <=43125532+3000
+         )
 
-A630_parental <- fread("../OV_meBRCA1_Nanopore/Me_all/OVCAR8_LP_A6_30_extract_5mc_brca1.tsv")%>%
-  filter(mod_code == "m",
-         ref_position >=43125192-3000, ref_position <=43125532+3000)
-
-
-
-crispr <- stackStringsFromBam("../20260330_ONT_Multiplex_DNA/output_2026/OVCAR8_CRISPR1_48/OVCAR8_A630_CRISPR1_IC80_multiplex_mapped_sc.bam", param = "chr17:43124697-43124736", use.names = T, )
+crispr <- stackStringsFromBam("../20260330_ONT_Multiplex_DNA/output/OVCAR8_CRISPR1_48/OVCAR8_A630_CRISPR1_IC80_multiplex_mapped_sc.bam", param = "chr17:43124697-43124736", use.names = T, )
 
 crispr_df <- data.frame(read_id= names(crispr), 
                       SNV =data.frame(crispr)[,1])
 
 
 
-mod_df <- data.frame("read_id" = c("81e9eebd-ab94-4d4c-8e5a-f3a614295b60", "899fa7ed-2665-41ff-9dec-d58d838adada","899fa7ed-2665-41ff-9dec-d58d838adada","899fa7ed-2665-41ff-9dec-d58d838adada","4d0dbd0d-5ad7-4819-9745-c88c5accf2fc","4d0dbd0d-5ad7-4819-9745-c88c5accf2fc","74b6cff7-f035-4139-b5ba-0540b1cd16e7", "ca26db19-f44c-4716-b9c3-540999ab02b0","a3a7a978-4336-42d8-84e1-0f0359bfd6fc"),
-                     "end" = c(43124726, 43124729,43124690, 43124683,43124728, 43124720,43124731, 43124753, 43124753),
-                     "start" = c(43124540, 43124710, 43124686, 43124328, 43124722, 43124717, 43124720,43124748,43124747),
-                     "SNV" = c(rep("DEL",7), "INDEL","INDEL")) %>%
+mod_df <- data.frame("read_id" = c("123d2dab-4e89-45b4-92f5-67532e437b92",    "123d2dab-4e89-45b4-92f5-67532e437b92","899fa7ed-2665-41ff-9dec-d58d838adada","899fa7ed-2665-41ff-9dec-d58d838adada","899fa7ed-2665-41ff-9dec-d58d838adada","4d0dbd0d-5ad7-4819-9745-c88c5accf2fc","4d0dbd0d-5ad7-4819-9745-c88c5accf2fc","74b6cff7-f035-4139-b5ba-0540b1cd16e7", "a3a7a978-4336-42d8-84e1-0f0359bfd6fc"),
+                     "end" = c(43124733, 43124743,  43124729,43124690, 43124683,43124728, 43124720,43124731, 43124753),
+                     "start" = c(43124726, 43124735, 43124710, 43124686, 43124328, 43124722, 43124717, 43124720,43124747),
+                     "SNV" = c(rep("DEL",8), "INDEL")) %>%
   mutate(SNV = factor(SNV, levels = c("REF", "DEL", "INDEL")))
 
-mod_df2 <- data.frame("read_id" = c("73167896-d0d4-4596-aa37-6b959bf8a196","ca26db19-f44c-4716-b9c3-540999ab02b0","a3a7a978-4336-42d8-84e1-0f0359bfd6fc"),
-                     "POS" = c(43124729, 43124726,43124726),
-                     "SNV" = rep("INDEL",3)) %>%
+mod_df2 <- data.frame("read_id" = c("a3a7a978-4336-42d8-84e1-0f0359bfd6fc"),
+                     "POS" = c(43124726),
+                     "SNV" = "INDEL") %>%
   mutate(SNV = factor(SNV, levels = c("REF", "DEL", "INDEL")))
 
 plot1 <- crispr_df %>%
-left_join(crispr_guide1 %>%
+inner_join(crispr_guide1 %>%
   group_by(read_id) %>%
-  mutate(read_valid = sum(ref_position %in% seq(43124684,43124741))) %>%
+  mutate(read_valid = sum(ref_position %in% seq(43125192,43125532))) %>%
   filter(read_valid >0) %>%
   mutate(Meth = case_when(mod_qual >0.6 ~ "Me",
                           mod_qual <0.4 ~ "Un",
@@ -1793,8 +1788,7 @@ left_join(crispr_guide1 %>%
       axis.title.y = element_blank(),
         axis.title.x = element_blank(),
         strip.background = element_blank(),
-        axis.ticks.y = element_blank())+
-  facet_wrap(~SNV, scales = "free_y", nrow = 3)
+        axis.ticks.y = element_blank())
 
 
 gg_gene_annotation<-  BRCA1_annotation %>%
@@ -1815,7 +1809,7 @@ gg_gene_annotation<-  BRCA1_annotation %>%
           axis.ticks = element_blank(),
           axis.title.y = element_blank())
 
-ggarrange(plot1, gg_gene_annotation, heights = c(0.85, 0.15), common.legend = T, legend = "bottom", nrow =2, align = "hv")
+ggarrange(plot1, gg_gene_annotation, heights = c(0.8, 0.2), common.legend = T, legend = "bottom", nrow =2, align = "hv")
 ggsave("plots/CRISPR_read_level.pdf", height = 3.5, width = 10)
 
 
@@ -1825,14 +1819,14 @@ left_join(crispr_guide1 %>%
   group_by(read_id) %>%
   mutate(read_valid = sum(ref_position %in% seq(43124684,43124741))) %>%
   filter(read_valid >0) %>%
-  mutate(Meth = case_when(mod_qual >0.6 ~ "Me",
-                          mod_qual <0.4 ~ "Un",
+  mutate(Meth = case_when(call_prob >0.6 ~ "Me",
+                          call_prob <0.4 ~ "Un",
                            TRUE ~NA)))%>%
   filter(!is.na(Meth)) %>%
   group_by(read_id) %>%
   mutate(med_meth = sum(Meth == "Me")/n()) %>%
   mutate(SNV = case_when(str_detect(SNV, "--") ~ "DEL",
-                                    read_id %in% c("a3a7a978-4336-42d8-84e1-0f0359bfd6fc","ca26db19-f44c-4716-b9c3-540999ab02b0","73167896-d0d4-4596-aa37-6b959bf8a196") ~ "INDEL",
+                                    read_id %in% c("a3a7a978-4336-42d8-84e1-0f0359bfd6fc","81e9eebd-ab94-4d4c-8e5a-f3a614295b60","73167896-d0d4-4596-aa37-6b959bf8a196") ~ "INDEL",
                                     TRUE ~ "REF"),
          SNV = factor(SNV, levels = c("REF", "DEL", "INDEL")),
          read_id_mod = paste0(med_meth, "_", read_id)) %>%
@@ -4667,6 +4661,87 @@ write.csv(ctg_surv ,file = "output/tables_plotting/SuppFig22_drug_response.csv",
 
 ```
 
+## baseline cisplatin 
+
+```{r}
+cisplatin <-  fread("data/incucytes/260703_ctg_cis_converted.csv", skip = 3) %>%
+  mutate(rowL = str_sub(Well, 1,1),
+         colL = str_sub(Well, 2,3)) %>%
+  dplyr::select(-c(V1, Well)) %>%
+  pivot_wider(names_from = "colL", values_from = "Lum") %>%
+  dplyr::select(-c("1", "12")) %>%
+  filter(!rowL %in% c("A", "H") ) %>%
+  `colnames<-`(c("rowL","50", "25", "5" , "2.5", "0.5", "0.25", "0.05", "0.025", "0.05", "0.0125"))
+
+
+cisplatin$sample <- c(rep("UWB1", 3), rep("OVCAR8", 3))
+
+cisplatin <- cisplatin%>%
+  pivot_longer(cols = -c("rowL", "sample"), values_to = "Lum", names_to = "Conc") %>%
+  mutate(drug = "cisplatin") %>%
+  mutate(Conc = as.numeric(Conc))
+
+
+ctg_surv <- cisplatin%>% 
+  group_by(drug, Conc, sample) %>%
+  summarise(mean_raw = mean(Lum)) %>% 
+  group_by(sample,  drug) %>%
+  mutate(survival_perc = mean_raw / mean_raw[1] ) 
+```
+
+```{r}
+library(drc)
+
+cis_model <- drc::drm(survival_perc ~ Conc, curveid = sample, data = ctg_surv, fct = LL.4(),
+             control = drmc(errorm = FALSE))
+IC50_cis <- ED(cis_model, 50, interval = "delta")
+
+ctg_surv %>% 
+  group_by(drug,  Conc, sample) %>%
+  summarise(mean_surv = mean(survival_perc), sd_surv = sd(survival_perc), .groups = "drop") %>%
+  ggplot(aes(x = Conc, y = mean_surv, color = sample, group= sample )) +
+               scale_x_log10("Concentration (uM)") +
+    theme_bw()+
+  scale_y_continuous(labels = scales::percent, "Survival (%)")+
+              theme( axis.text.x = element_text(angle = 90),
+        legend.position = "bottom") +
+  geom_line()+
+  facet_wrap(~drug, ncol=2)+
+  geom_errorbar(aes(ymin = mean_surv - sd_surv,
+                  ymax = mean_surv+ sd_surv),
+              width = 0.1)
+ggsave("plots/ctg_surv_baseline.pdf", height = 5, width = 10)
+```
+
+```{r}
+sample_pal <- c("parental" = "#4C78A8",
+                "guide1" = "#F58518",
+                 "guide2" = "#54A24B" )
+
+ctg_surv %>% 
+  group_by(sample, drug, Conc) %>%
+  summarise(mean_surv = mean(survival_perc), sd_surv = sd(survival_perc), .groups = "drop") %>%
+  mutate(sample = factor(sample, levels= c("parental", "guide1", "guide2")),
+         drug = factor(drug, levels = c("olaparib", "cisplatin"))) %>%
+  ggplot(aes(x = Conc, y = mean_surv , colour = sample, group =sample)) +
+               scale_x_log10("Concentration (uM)") +
+    theme_bw()+
+  scale_y_continuous(labels = scales::percent, "Survival (%)")+
+              theme( axis.text.x = element_text(angle = 90),
+        legend.position = "bottom") +
+  geom_line()+
+  facet_wrap(~drug, ncol=2)+
+  geom_errorbar(aes(ymin = mean_surv - sd_surv,
+                  ymax = mean_surv+ sd_surv),
+              width = 0.1)+
+  scale_colour_manual(values = sample_pal)
+ggsave("plots/ctg_surv_olaparib_selection.pdf", height = 5, width = 10)
+
+
+write.csv(ctg_surv ,file = "output/tables_plotting/SuppFig22_drug_response.csv",row.names = F, quote = F)
+
+```
+
 # Supplementary Material 1
 
 ```{r}
@@ -4715,7 +4790,7 @@ ggsave("plots/supp_pdx_integration_pca.pdf", height =6.5, width = 6)
 
 ```
 
-#plots not included
+# plots not included
 
 ```{r}
 pdx_tpm%>%
@@ -5017,7 +5092,7 @@ ggsave("plots/ctg_lum_olaparib_selection.pdf", height = 7, width = 6)
 
 ```
 
-#running of PMD
+# running of PMD
 
 ```{r}
 # library(MMSeekR)

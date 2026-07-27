@@ -4670,7 +4670,7 @@ cisplatin <-Sys.glob("data/incucytes/2607*_ctg_cis.csv") %>%
   map_dfr(~fread(.x, skip= 3) %>%
   dplyr::select(rowL = V1,"50" = V3, "25" = V4, "5"  = V5, "2.5" = V6,
                 "0.5" = V7, "0.25" = V8, "0.05" = V9, "0.025" = V10,
-                "0.005" = V11, "0.0125" = V12 ) %>%
+                "0.005" = V11, "0" = V12 ) %>%
     filter(rowL != "H") %>%
     mutate(sample = c(rep("UWB1+BRCA1", 3), rep("OVCAR8", 3), NULL),
            rep = gsub("_ctg_cis.csv", "",basename(.x))))
@@ -4685,16 +4685,31 @@ cisplatin <- cisplatin%>%
 cisplatin <- rbind(cisplatin,
                    fread("data/incucytes/jacinta_drc.csv")  %>%
   dplyr::select(sample = cell_line, rep = date, Conc = dose, Lum = Lum, drug = drug)%>%
-                     dplyr::filter(drug == "cisplatin"& !(sample == "WEHICS62"& rep =="240408")))
-
+                    # dplyr::filter(drug == "cisplatin"))
+                     dplyr::filter(drug == "cisplatin"& !(sample == "WEHICS62"& rep =="240408" & 
+                                                            Conc %in% c(0.05, 0.025))))
+# checking data quality
+#cisplatin %>%
+  # adding control untreated mean column
+#  group_by(drug, sample, rep) %>%
+ # mutate(ctrl_Lum = mean(Lum[Conc == 0], na.rm = TRUE)) %>%
+ # ungroup() %>%
+ # mutate(survival_perc = Lum/ctrl_Lum) %>%
+ # ggplot(aes(x=Conc, y = survival_perc)) +
+ # geom_point() +
+ # scale_x_log10() +
+ # facet_wrap(sample ~ rep, scales = "free_y")
 
 ctg_surv <- cisplatin%>% 
-  group_by(drug, Conc, sample, rep) %>%
-  summarise(mean_raw = mean(Lum)) %>% 
-  group_by(sample,  drug) %>%
-  mutate(survival_perc = mean_raw / mean_raw[1] ) 
-
-
+  group_by(drug,  sample, rep,Conc) %>%
+  summarise(mean_raw = mean(Lum)) %>%
+  mutate(ctrl_Lum = mean_raw[Conc == 0]) %>%
+  mutate(survival_perc = mean_raw / ctrl_Lum) %>%
+  mutate(meBRCA1 = case_when(sample == "OVCAR8LPA630" ~ "Hom meBRCA1",
+                             sample == "OVCAR8" ~ "Het meBRCA1",
+                             sample == "UWB1" ~ "Mut BRCA1",
+                             sample == "UWB1+BRCA1" ~ "Func BRCA1",
+                             sample == "WEHICS62" ~ "Hom meBRCA1"))
 
 ```
 
@@ -4703,54 +4718,62 @@ library(drc)
 
 cis_model <- drc::drm(survival_perc ~ Conc, curveid = sample, data = ctg_surv, fct = LL.4(),
              control = drmc(errorm = FALSE))
+
 IC50_cis <- ED(cis_model, 50, interval = "delta")
+IC50_df <- as.data.frame(IC50_cis) %>%
+  tibble::rownames_to_column("id") %>%
+  mutate(sample = gsub("e:(.*):50", "\\1", id)) %>%
+  dplyr::rename(IC50 = Estimate) %>%
+  ungroup() %>%
+  dplyr::select(sample,IC50) %>%
+  mutate(IC50 = signif(IC50, 3)) 
 
+# prediction grid per sample
+ctg_surv_curve <- ctg_surv %>%
+  distinct(sample, meBRCA1, drug) %>%
+  group_by(sample,meBRCA1, drug) %>%
+  reframe(Conc = 10^seq(log10(min(ctg_surv$Conc[ctg_surv$Conc > 0])),
+                        log10(max(ctg_surv$Conc)),
+                        length.out = 100))
+
+ctg_surv_curve$fit <- predict(cis_model,
+                              newdata = data.frame(Conc = ctg_surv_curve$Conc,
+                                                   sample = ctg_surv_curve$sample,
+                                                   meBRCA1 = ctg_surv_curve$meBRCA1))
+
+options(scipen = 999)
 
 ctg_surv %>% 
-  group_by(sample, drug, Conc) %>%
+  group_by(sample, meBRCA1, drug, Conc) %>%
   summarise(mean_surv = mean(survival_perc), sd_surv = sd(survival_perc), .groups = "drop") %>%
-  ggplot(aes(x = Conc, y = mean_surv , colour = sample, group =sample)) +
+  filter(Conc != 0) %>%
+  ggplot(aes(x = Conc, y = mean_surv , colour = meBRCA1, group =sample)) +
                scale_x_log10("Concentration (uM)") +
-    theme_bw()+
-  scale_y_continuous(labels = scales::percent, "Survival (%)")+
-              theme( axis.text.x = element_text(angle = 90),
-        legend.position = "bottom") +
-  geom_line()+
-  facet_wrap(~drug, ncol=2)+
+  scale_y_continuous(labels = scales::percent, 
+                     "Survival (%)",
+                     breaks = c(0, 0.25, 0.5, 0.75, 1),
+                     limits = c(0, 1.15))+
+  geom_line(data = ctg_surv_curve, aes(x = Conc, y = fit, colour = meBRCA1, group = sample)) +
   geom_errorbar(aes(ymin = mean_surv - sd_surv,
                   ymax = mean_surv+ sd_surv),
-              width = 0.1)
+              width = 0.1) +
+  geom_point(aes(shape = sample), size = 2) + 
+  scale_colour_manual(values = sample_palette) +
+  scale_shape_manual(values = c("OVCAR8" = 5, "OVCAR8LPA630" = 18, "UWB1" = 17, "UWB1+BRCA1" = 2, "WEHICS62" =16)) +
+  guides(colour = guide_legend(nrow = 1, order = 1),
+         shape  = guide_legend(nrow = 1, order = 2)) +
+  theme_bw()+
+  theme(legend.position = "bottom", 
+        legend.box = "vertical")
+
 ggsave("plots/ctg_surv_baseline.pdf", height = 5, width = 10)
-```
-
-```{r}
-sample_pal <- c("parental" = "#4C78A8",
-                "guide1" = "#F58518",
-                 "guide2" = "#54A24B" )
-
-ctg_surv %>% 
-  group_by(sample, drug, Conc) %>%
-  summarise(mean_surv = mean(survival_perc), sd_surv = sd(survival_perc), .groups = "drop") %>%
-  mutate(sample = factor(sample, levels= c("parental", "guide1", "guide2")),
-         drug = factor(drug, levels = c("olaparib", "cisplatin"))) %>%
-  ggplot(aes(x = Conc, y = mean_surv , colour = sample, group =sample)) +
-               scale_x_log10("Concentration (uM)") +
-    theme_bw()+
-  scale_y_continuous(labels = scales::percent, "Survival (%)")+
-              theme( axis.text.x = element_text(angle = 90),
-        legend.position = "bottom") +
-  geom_line()+
-  facet_wrap(~drug, ncol=2)+
-  geom_errorbar(aes(ymin = mean_surv - sd_surv,
-                  ymax = mean_surv+ sd_surv),
-              width = 0.1)+
-  scale_colour_manual(values = sample_pal)
-ggsave("plots/ctg_surv_olaparib_selection.pdf", height = 5, width = 10)
 
 
-write.csv(ctg_surv ,file = "output/tables_plotting/SuppFig22_drug_response.csv",row.names = F, quote = F)
+write.csv(ctg_surv ,file = "output/tables_plotting/SuppFig_baseline_drug_response_cisplatin.tsv",row.names = F, quote = F)
 
 ```
+
+
 
 # Supplementary Material 1
 
